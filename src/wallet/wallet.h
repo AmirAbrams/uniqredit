@@ -901,6 +901,8 @@ public:
 
     /* Set the current hd master key (will reset the chain child index counters) */
     bool SetHDMasterKey(const CKey& key);
+    
+    int64_t GetAdvertisedBalance() const;    
 };
 
 /** A key allocated from the key pool. */

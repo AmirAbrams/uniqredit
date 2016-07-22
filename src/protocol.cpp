@@ -3,8 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "ibtp.h"
 #include "protocol.h"
-
 #include "util.h"
 #include "utilstrencodings.h"
 
@@ -120,7 +120,9 @@ std::string CMessageHeader::GetCommand() const
 bool CMessageHeader::IsValid(const MessageStartChars& pchMessageStartIn) const
 {
     // Check start string
-    if (memcmp(pchMessageStart, pchMessageStartIn, MESSAGE_START_SIZE) != 0)
+    std::string schain;
+    CIbtp ibtp;
+    if (memcmp(pchMessageStart, pchMessageStartIn, MESSAGE_START_SIZE) != 0 && !ibtp.IsIbtpChain(pchMessageStartIn, schain))
         return false;
 
     // Check the command string for errors
@@ -164,6 +166,7 @@ void CAddress::Init()
 {
     nServices = NODE_NONE;
     nTime = 100000000;
+    advertised_balance = 0;
 }
 
 CInv::CInv()

@@ -300,6 +300,40 @@ UniValue vote(const UniValue& params, bool fHelp)
 
 }
 
+UniValue listadvertisedbalances(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "listadvertisedbalances\n"
+            "Get Tor addresses with advertised balances.");
+
+    UniValue result(UniValue::VARR);
+
+    std::map<CAddress, uint64_t> advertised_balances = ListAdvertisedBalances();
+
+    for (std::map<CAddress,uint64_t>::const_iterator address = advertised_balances.begin();advertised_balances.end() != address;address++) {
+        UniValue entry(UniValue::VOBJ);
+        entry.push_back(Pair("address", address->first.ToStringIP()));
+        entry.push_back(Pair("balance", ValueFromAmount(address->second)));
+        result.push_back(entry);
+    }
+
+    return result;
+}
+
+/*bool SendDelegateRequest(uint64_t nonce, std::string onion, uint256 burntxid, double amount, double fee, int block) {
+
+    LOCK(cs_vNodes);
+    BOOST_FOREACH(CNode* pnode, vNodes)
+    {
+        CAddress address = pnode->addr;
+        if (address.advertised_balance > amount)
+            pnode->PushMessage("vendor", nonce, onion, burntxid, amount, fee, block);
+    }
+    return true;
+}*/
+
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------

@@ -57,6 +57,8 @@ extern CTranslationInterface translationInterface;
 extern const char * const UNIQREDIT_CONF_FILENAME;
 extern const char * const UNIQREDIT_PID_FILENAME;
 
+extern int64_t nAdvertisedBalance;
+
 /**
  * Translation function: Call Translate signal on UI interface, which returns a boost::optional result.
  * If no translation slot is registered, nothing is returned, and simply return the input.

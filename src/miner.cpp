@@ -207,18 +207,6 @@ CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
     pblock->vtx[0] = coinbaseTx;
     pblocktemplate->vTxFees[0] = -nFees;
 
-	CAmount total= 0;	
-	LogPrintf(" Coinbase tx size:  %d\n",coinbaseTx.vout.size());
-	for(unsigned int i=0; i < coinbaseTx.vout.size();i++){
-		CAmount payout = coinbaseTx.vout[i].nValue;
-		total +=payout;
-		CTxDestination address;
-		ExtractDestination(coinbaseTx.vout[i].scriptPubKey, address);
-		string receiveAddress = CUniqreditAddress(address).ToString().c_str();
-		LogPrintf(" %s , %ld \n",receiveAddress,payout);
-		}
-	LogPrintf(" Total Paid out :  %ld\n",total);
-
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);

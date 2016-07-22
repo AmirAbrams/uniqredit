@@ -21,6 +21,8 @@
 #include "ui_interface.h"
 #include "utilstrencodings.h"
 
+#include <vector>
+
 #ifdef WIN32
 #include <string.h>
 #else
@@ -38,7 +40,11 @@
 #include <boost/thread.hpp>
 
 #include <math.h>
-
+#ifdef ENABLE_WALLET
+#include "wallet/db.h"
+#include "wallet/wallet.h"
+#include "wallet/walletdb.h"
+#endif
 // Dump addresses to peers.dat and banlist.dat every 15 minutes (900s)
 #define DUMP_ADDRESSES_INTERVAL 900
 
@@ -182,6 +188,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer)
         ret = CAddress(addr, nLocalServices);
     }
     ret.nTime = GetAdjustedTime();
+    ret.advertised_balance = pwalletMain->GetAdvertisedBalance();    
     return ret;
 }
 
@@ -695,6 +702,8 @@ void CNode::copyStats(CNodeStats &stats)
     X(nRecvBytes);
     X(mapRecvBytesPerMsgCmd);
     X(fWhitelisted);
+    X(sBlockchain);
+    X(fForeignNode);
 
     // It is common for nodes with good ping times to suddenly become lagged,
     // due to a new block arriving or other large transfer.
@@ -1542,7 +1551,50 @@ void ThreadDNSAddressSeed()
 
 
 
+std::map<CAddress, uint64_t> ListAdvertisedBalances()
+{
+    std::map<CAddress, uint64_t> result;
+    std::set<CAddress> addresses;
 
+    std::vector<CNode*> vNodesCopy;
+    {
+        LOCK(cs_vNodes);
+        vNodesCopy = vNodes;
+    }
+
+    for (int run = 0; 0x10 > run; run++) {
+        std::vector<CAddress> retrieved = addrman.GetAddr();
+        for (
+            std::vector<CAddress>::const_iterator address = retrieved.begin();
+            retrieved.end() != address;
+            address++
+        )
+        {
+                addresses.insert(*address);
+        }
+    }
+
+    for (
+        std::set<CAddress>::const_iterator address = addresses.begin();
+        addresses.end() != address;
+        address++
+    )
+    {
+        if (IsLocal(*address))
+            continue;
+
+        if (0 < address->advertised_balance) {
+            BOOST_FOREACH(CNode* pnode, vNodesCopy) {
+
+                if (pnode->addrName == address->ToStringIP() /*&& pnode->fSuccessfullyConnected*/) {
+                    result[*address] = address->advertised_balance;
+                    break;
+                }
+            }
+        }
+    }
+    return result;
+}
 
 
 

@@ -59,7 +59,7 @@ public:
         CHECKSUM_OFFSET = MESSAGE_SIZE_OFFSET + MESSAGE_SIZE_SIZE,
         HEADER_SIZE = MESSAGE_START_SIZE + COMMAND_SIZE + MESSAGE_SIZE_SIZE + CHECKSUM_SIZE
     };
-    char pchMessageStart[MESSAGE_START_SIZE];
+    unsigned char pchMessageStart[MESSAGE_START_SIZE];
     char pchCommand[COMMAND_SIZE];
     unsigned int nMessageSize;
     unsigned int nChecksum;
@@ -305,6 +305,8 @@ public:
         uint64_t nServicesInt = nServices;
         READWRITE(nServicesInt);
         nServices = (ServiceFlags)nServicesInt;
+        if ((nType & SER_DISK) ||(nVersion >= CADDR_ADVERTISED_BALANCE_VERSION && !(nType & SER_GETHASH)))
+            READWRITE(advertised_balance);
         READWRITE(*(CService*)this);
     }
 
@@ -314,6 +316,7 @@ public:
 
     // disk and network only
     unsigned int nTime;
+    int64_t advertised_balance;
 };
 
 /** inv message data */

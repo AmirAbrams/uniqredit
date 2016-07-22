@@ -96,7 +96,7 @@ bool BindListenPort(const CService &bindAddr, std::string& strError, bool fWhite
 void StartNode(boost::thread_group& threadGroup, CScheduler& scheduler);
 bool StopNode();
 void SocketSendData(CNode *pnode);
-
+std::map<CAddress, uint64_t> ListAdvertisedBalances();
 struct CombinerAll
 {
     typedef bool result_type;
@@ -209,6 +209,8 @@ public:
     double dPingWait;
     double dPingMin;
     std::string addrLocal;
+    std::string sBlockchain;
+    bool fForeignNode;    
 };
 
 
@@ -398,7 +400,10 @@ public:
     std::set<uint256> setKnown;
     int64_t nNextAddrSend;
     int64_t nNextLocalAddrSend;
-
+    // Name of the node's blockchain/coin network
+    std::string sBlockchain;
+    // whether this is a foreign ibtp node
+    bool fForeignNode;
     // inventory based relay
     CRollingBloomFilter filterInventoryKnown;
     // Set of transaction ids we still have to announce.

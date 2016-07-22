@@ -95,6 +95,7 @@ UNIQREDIT_CORE_H = \
   httprpc.h \
   httpserver.h \
   indirectmap.h \
+  ibtp.h \
   init.h \
   key.h \
   keystore.h \
@@ -292,6 +293,7 @@ libuniqredit_common_a_SOURCES = \
   compressor.cpp \
   core_read.cpp \
   core_write.cpp \
+  ibtp.cpp \
   key.cpp \
   keystore.cpp \
   netbase.cpp \

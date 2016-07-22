@@ -2170,6 +2170,12 @@ UniValue settxfee(const UniValue& params, bool fHelp)
     return true;
 }
 
+int calculateAdvertisedBalanceCoins(int nAdvBal) {
+    double fraction = nAdvBal/100.0;
+    double intermediate =  fraction * pwalletMain->GetBalance();
+    return (int)(intermediate / COIN);
+}
+
 UniValue getwalletinfo(const UniValue& params, bool fHelp)
 {
     if (!EnsureWalletIsAvailable(fHelp))
@@ -2201,6 +2207,7 @@ UniValue getwalletinfo(const UniValue& params, bool fHelp)
     UniValue obj(UniValue::VOBJ);
     obj.push_back(Pair("walletversion", pwalletMain->GetVersion()));
     obj.push_back(Pair("balance",       ValueFromAmount(pwalletMain->GetBalance())));
+    obj.push_back(Pair("advertisedbalance",calculateAdvertisedBalanceCoins(nAdvertisedBalance)));
     obj.push_back(Pair("unconfirmed_balance", ValueFromAmount(pwalletMain->GetUnconfirmedBalance())));
     obj.push_back(Pair("immature_balance",    ValueFromAmount(pwalletMain->GetImmatureBalance())));
     obj.push_back(Pair("txcount",       (int)pwalletMain->mapWallet.size()));

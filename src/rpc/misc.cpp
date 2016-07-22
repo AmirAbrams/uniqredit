@@ -51,6 +51,9 @@ using namespace std;
  *
  * Or alternatively, create a specific query method for the information.
  **/
+ 
+ 
+ 
 UniValue getinfo(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)

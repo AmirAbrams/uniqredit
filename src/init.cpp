@@ -1184,6 +1184,16 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         CNode::SetMaxOutboundTarget(GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET)*1024*1024);
     }
 
+    if (mapArgs.count("-advertisedbalance")) // MIL: fraction of balance available for delegate transactions
+    {
+        nAdvertisedBalance = atoi(mapArgs["-advertisedbalance"].c_str());
+        if (nAdvertisedBalance < 0 ||nAdvertisedBalance > 100) {
+            InitError(_("Invalid amount for -advertisedbalance=<percentage>"));
+            return false;
+        }
+    }
+
+
     // ********************************************************* Step 7: load block chain
     boost::filesystem::path rawdata = GetDataDir() / "ratings", biddir = GetDataDir() / "bidtracker", trustdb = GetDataDir() / "ratings/rawdata.db", loandir = GetDataDir() / "loanmaster", loandir2 = GetDataDir() / "loandata";
 
