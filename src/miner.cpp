@@ -21,6 +21,7 @@
 #include "primitives/transaction.h"
 #include "script/standard.h"
 #include "timedata.h"
+#include "trust.h"
 #include "txmempool.h"
 #include "util.h"
 #include "utilmoneystr.h"
@@ -92,23 +93,6 @@ std::string convertAddress(const char address[], char newVersionByte){
     v[0]=newVersionByte;
     string result = EncodeBase58Check(v);
     return result;
-}
-
-std::map<std::string,double> getdonors(){
-	std::map<std::string,double> donors;
-	//Uniqredit BlockShare Donors
-	donors["UPCSFhF2KziU13pVjWgLiwfWLbdGRFDHas"]=0.0045;
-	donors["UQWrzQu7qZHXPxKzFSPWjdJ4k2Tsqa2FW5"]=0.0227;
-	donors["URxhymXZy6dmg31KcNPCMGfybXtw8SpQTF"]=0.0317;
-	donors["USPJAMYnpeLKNqAxugzKBCu3zj53zdYtcp"]=0.0478;
-	donors["UT9gvcVfCTUDpm4zvzHwc1CGuLt6yfehjM"]=0.0045;
-	donors["UUtFA56Wz4UDaL67quFLKgYiozYTGf18QT"]=0.0045;
-	donors["UN7t5ToEwsJixTVyzVwDNURY7bYQJi2Wqm"]=0.0227;
-	donors["Ua4aHMb1Mav5cigegwWvQ3n4rpk3KAF6h4"]=0.0228;
-	donors["UgyFnjrYr1Rocpqt5TRbdqk7j4xajcYHZe"]=0.0004;
-	donors["UkAVRPjPWmAk7Wru63Vkajx1nQcSrUbJGx"]=0.8384;		
-
-	return donors;
 }
 
 BlockAssembler::BlockAssembler(const CChainParams& _chainparams)

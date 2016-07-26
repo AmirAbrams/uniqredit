@@ -2475,15 +2475,35 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
 	int64_t devfund = (GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus()))* (0.01);
 	int64_t dev_subsidy = 0;
+	bool devexists=false;
+	std::map<std::string, double>::iterator donorit;
+	std::map<std::string, double> donors = getdonors();
 
-	for (unsigned int i = 0; i < block.vtx[0].vout.size(); i++){
+	if(chainActive.Tip()->nHeight > 20000){
 
-		if (block.vtx[0].vout[i].scriptPubKey == DEV_SCRIPT){
-			dev_subsidy += block.vtx[0].vout[i].nValue;
+		for (unsigned int i = 0; i < block.vtx[0].vout.size(); i++){
 
-			if (dev_subsidy < devfund)
-				return state.DoS(100, error("ConnectBlock() : coinbase does not yeild enough to the development fund (actual=%d vs required=%d)", dev_subsidy, devfund));
+			if (block.vtx[0].vout[i].scriptPubKey == DEV_SCRIPT){
+				devexists=true;
+
+				dev_subsidy += block.vtx[0].vout[i].nValue;
+
+				if (dev_subsidy < devfund || devexists==false)
+					return state.DoS(100, error("ConnectBlock() : coinbase does not yeild enough to the development fund (actual=%d vs required=%d)", dev_subsidy, devfund));
+				}
+		}
+
+		for (unsigned int j = 0; j < block.vtx[0].vout.size(); j++){
+			CTxDestination addressx;
+			ExtractDestination(block.vtx[0].vout[j].scriptPubKey, addressx);
+			string newAddressString = CUniqreditAddress(addressx).ToString().c_str();
+			donorit = donors.find(newAddressString);
+			
+			if (donorit != donors.end()){
+				if ((donorit->second * (4 * COIN) < block.vtx[0].vout[j].nValue))
+					return state.DoS(100, error("ConnectBlock(): donor funds error"), REJECT_INVALID, "invalid-block-donor-values");
 			}
+		}
 	}
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
@@ -4156,7 +4176,7 @@ bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview,
             return error("VerifyDB(): *** ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
         // check level 1: verify block validity
         if (nCheckLevel >= 1 && !CheckBlock(block, state, chainparams.GetConsensus()))
-            return error("%s: *** found bad block at %d, hash=%s (%s)\n", __func__, 
+            return error("%s: *** found bad block at %d, hash=%s (%s)\n", __func__,
                          pindex->nHeight, pindex->GetBlockHash().ToString(), FormatStateMessage(state));
         // check level 2: verify undo validity
         if (nCheckLevel >= 2 && pindex) {
@@ -4248,7 +4268,7 @@ bool LoadBlockIndex()
     return true;
 }
 
-bool InitBlockIndex(const CChainParams& chainparams) 
+bool InitBlockIndex(const CChainParams& chainparams)
 {
     LOCK(cs_main);
 	DEV_SCRIPT << OP_DUP << OP_HASH160 << ParseHex(DEV_ADDRESS) << OP_EQUALVERIFY << OP_CHECKSIG;
