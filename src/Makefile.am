@@ -102,6 +102,8 @@ UNIQREDIT_CORE_H = \
   dbwrapper.h \
   limitedmap.h \
   loanmanager.h \
+  loanmaster.h \
+  lz4/lz4.h \
   main.h \
   memusage.h \
   merkleblock.h \
@@ -125,6 +127,7 @@ UNIQREDIT_CORE_H = \
   script/sign.h \
   script/standard.h \
   script/ismine.h \
+  smessage.h \
   streams.h \
   support/allocators/secure.h \
   support/allocators/zeroafterfree.h \
@@ -175,6 +178,7 @@ libuniqredit_server_a_SOURCES = \
   init.cpp \
   dbwrapper.cpp \
   loanmanager.cpp \
+  loanmaster.cpp \
   main.cpp \
   merkleblock.cpp \
   miner.cpp \
@@ -191,6 +195,7 @@ libuniqredit_server_a_SOURCES = \
   rpc/net.cpp \
   rpc/rawtransaction.cpp \
   rpc/server.cpp \
+  rpc/rpcsmessage.cpp \
   script/sigcache.cpp \
   script/ismine.cpp \
   timedata.cpp \
@@ -301,6 +306,7 @@ libuniqredit_common_a_SOURCES = \
   scheduler.cpp \
   script/sign.cpp \
   script/standard.cpp \
+  smessage.cpp \
   $(UNIQREDIT_CORE_H)
 
 # util: shared between all executables.

@@ -305,8 +305,8 @@ public:
         uint64_t nServicesInt = nServices;
         READWRITE(nServicesInt);
         nServices = (ServiceFlags)nServicesInt;
-        if ((nType & SER_DISK) ||(nVersion >= CADDR_ADVERTISED_BALANCE_VERSION && !(nType & SER_GETHASH)))
-            READWRITE(advertised_balance);
+        /*if ((nType & SER_DISK) ||(nVersion >= CADDR_ADVERTISED_BALANCE_VERSION && !(nType & SER_GETHASH)))
+            READWRITE(advertised_balance);*/
         READWRITE(*(CService*)this);
     }
 

@@ -17,6 +17,8 @@
 #include "consensus/validation.h"
 #include "hash.h"
 #include "init.h"
+#include "ibtp.h"
+#include "loanmaster.h"
 #include "merkleblock.h"
 #include "net.h"
 #include "policy/fees.h"
@@ -28,6 +30,7 @@
 #include "script/script.h"
 #include "script/sigcache.h"
 #include "script/standard.h"
+#include "smessage.h"
 #include "tinyformat.h"
 #include "trust.h"
 #include "txdb.h"
@@ -6036,6 +6039,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else {
         // Ignore unknown commands for extensibility
+		SecureMsgReceiveData(pfrom, strCommand, vRecv);
+		FXReceiveData(pfrom, strCommand, vRecv);
         LogPrint("net", "Unknown command \"%s\" from peer=%d\n", SanitizeString(strCommand), pfrom->id);
     }
 
