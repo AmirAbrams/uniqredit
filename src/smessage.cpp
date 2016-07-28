@@ -50,10 +50,10 @@ Notes:
 
 
 #include "base58.h"
-#include "crypter.h"
+#include "wallet/crypter.h"
 #include "db.h"
 #include "init.h"
-#include "rpcprotocol.h"
+#include "rpc/protocol.h"
 #include "dbwrapper.h"
 #include "lz4/lz4.c"
 #include "xxhash/xxhash.h"

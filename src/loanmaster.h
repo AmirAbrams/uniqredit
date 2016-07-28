@@ -2,7 +2,7 @@
 #define LOAN_SERVER_H 
 
 #include <string>
-
+#include "net.h"
 #include "util.h"
 #include "utilmoneystr.h"
 
