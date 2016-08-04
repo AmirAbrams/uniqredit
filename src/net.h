@@ -89,6 +89,7 @@ CNode* FindNode(const CSubNet& subNet);
 CNode* FindNode(const std::string& addrName);
 CNode* FindNode(const CService& ip);
 CNode* FindNode(const NodeId id); //TODO: Remove this
+CNode* ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure);
 bool OpenNetworkConnection(const CAddress& addrConnect, bool fCountFailure, CSemaphoreGrant *grantOutbound = NULL, const char *strDest = NULL, bool fOneShot = false);
 void MapPort(bool fUseUPnP);
 unsigned short GetListenPort();
@@ -316,6 +317,30 @@ public:
 
 typedef std::map<CSubNet, CBanEntry> banmap_t;
 
+class SecMsgNode
+{
+public:
+    SecMsgNode()
+    {
+        lastSeen        = 0;
+        lastMatched     = 0;
+        ignoreUntil     = 0;
+        nWakeCounter    = 0;
+        nPeerId         = 0;
+        fEnabled        = false;
+    };
+    
+    ~SecMsgNode() {};
+    
+    int64_t                     lastSeen;
+    int64_t                     lastMatched;
+    int64_t                     ignoreUntil;
+    uint32_t                    nWakeCounter;
+    uint32_t                    nPeerId;
+    bool                        fEnabled;
+    
+};
+
 /** Information about a peer */
 class CNode
 {
@@ -422,6 +447,8 @@ public:
     std::vector<uint256> vBlockHashesToAnnounce;
     // Used for BIP35 mempool sending, also protected by cs_inventory
     bool fSendMempool;
+	
+	SecMsgNode smsgData;
 
     // Last time a "MEMPOOL" request was serviced.
     std::atomic<int64_t> timeLastMempoolReq;
@@ -722,6 +749,22 @@ public:
         {
             BeginMessage(pszCommand);
             ssSend << a1 << a2 << a3 << a4 << a5 << a6 << a7 << a8 << a9;
+            EndMessage(pszCommand);
+        }
+        catch (...)
+        {
+            AbortMessage();
+            throw;
+        }
+    }
+
+    template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9, typename T10>
+    void PushMessage(const char* pszCommand, const T1& a1, const T2& a2, const T3& a3, const T4& a4, const T5& a5, const T6& a6, const T7& a7, const T8& a8, const T9& a9, const T10& a10)
+    {
+        try
+        {
+            BeginMessage(pszCommand);
+            ssSend << a1 << a2 << a3 << a4 << a5 << a6 << a7 << a8 << a9 << a10;
             EndMessage(pszCommand);
         }
         catch (...)

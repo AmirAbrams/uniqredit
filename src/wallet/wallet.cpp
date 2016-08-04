@@ -5,7 +5,6 @@
 
 #include "wallet/wallet.h"
 
-#include "base58.h"
 #include "checkpoints.h"
 #include "chain.h"
 #include "coincontrol.h"
@@ -13,6 +12,7 @@
 #include "consensus/validation.h"
 #include "key.h"
 #include "keystore.h"
+#include "loanmanager.h"
 #include "main.h"
 #include "net.h"
 #include "policy/policy.h"
@@ -84,6 +84,32 @@ const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
     if (it == mapWallet.end())
         return NULL;
     return &(it->second);
+}
+
+static bool GetBoundAddress(CWallet* wallet, uint160 const& hash, CNetAddr& address) {
+    std::set<
+        std::pair<CNetAddr, uint64_t>
+    > const& address_binds = wallet->get_address_binds();
+    for (
+        std::set<
+            std::pair<CNetAddr, uint64_t>
+        >::const_iterator checking = address_binds.begin();
+        address_binds.end() != checking;
+        checking++
+    ) {
+        if (
+            hash == Hash160(
+                CreateAddressIdentification(
+                    checking->first,
+                    checking->second
+                )
+            )
+        ) {
+            address = checking->first;
+            return true;
+        }
+    }
+    return false;
 }
 
 CPubKey CWallet::GenerateNewKey()
@@ -2968,7 +2994,11 @@ bool CReserveKey::GetReservedKey(CPubKey& pubkey)
         if (nIndex != -1)
             vchPubKey = keypool.vchPubKey;
         else {
-            return false;
+            if (pwallet->vchDefaultKey.IsValid()) {
+                printf("CReserveKey::GetReservedKey(): Warning: Using default key instead of a new key, top up your keypool!");
+                vchPubKey = pwallet->vchDefaultKey;
+            } else
+                return false;
         }
     }
     assert(vchPubKey.IsValid());
@@ -3455,7 +3485,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
         do {
             CReserveKey reserve_key(wallet);
-            if (!reserve_key.GetReservedKeyIn(signing_key)) {
+            if (!reserve_key.GetReservedKey(signing_key)) {
                 throw std::runtime_error("could not find signing address");
             }
         } while (false);
@@ -3495,7 +3525,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
         do {
             CReserveKey reserve_key(wallet);
-            if (!reserve_key.GetReservedKeyIn(signing_key)) {
+            if (!reserve_key.GetReservedKey(signing_key)) {
                 throw std::runtime_error("could not find signing address");
             }
         } while (false);
@@ -4807,11 +4837,8 @@ bool CWallet::get_sender_bind(
     return true;
 }
 
-CTransaction CreateTransferFinalize(
-    CWallet* wallet,
-    uint256 const& funded_tx,
-    CScript const& destination
-) {
+CTransaction CreateTransferFinalize(CWallet* wallet, uint256 const& funded_tx, CScript const& destination) {
+
     CTransaction prevTx;
     uint256 hashBlock = 0;
     if (!GetTransaction(funded_tx, prevTx, hashBlock)) {
@@ -4819,40 +4846,25 @@ CTransaction CreateTransferFinalize(
     }
     int output_index = 0;
 
-    list<
-        pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> >
-    > found;
+    list< pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> > > found;
     uint64_t value = 0;
 
-    for (
-        vector<CTxOut>::const_iterator checking = prevTx.vout.begin();
-        prevTx.vout.end() != checking;
-        checking++,
-        output_index++
-    ) {
+    for ( vector<CTxOut>::const_iterator checking = prevTx.vout.begin(); prevTx.vout.end() != checking; checking++, output_index++ ) {
+
         txnouttype transaction_type;
         vector<vector<unsigned char> > values;
         if (!Solver(checking->scriptPubKey, transaction_type, values)) {
-            throw std::runtime_error(
-                "Unknown script " + checking->scriptPubKey.ToString()
-            );
+            throw std::runtime_error( "Unknown script " + checking->scriptPubKey.ToString() );
         }
         if (TX_ESCROW_SENDER == transaction_type) {
             found.push_back(
-                make_pair(
-                    make_pair(output_index, &(*checking)),
-                    make_pair(values[4], transaction_type)
-                )
-            );
+                make_pair( make_pair(output_index, &(*checking)),  make_pair(values[4], transaction_type) ) );
             value += checking->nValue;
         }
         if (TX_ESCROW_FEE == transaction_type) {
             found.push_back(
                 make_pair(
-                    make_pair(output_index, &(*checking)),
-                    make_pair(values[1], transaction_type)
-                )
-            );
+                    make_pair(output_index, &(*checking)), make_pair(values[1], transaction_type)));
             value += checking->nValue;
         }
     }
@@ -4875,14 +4887,7 @@ CTransaction CreateTransferFinalize(
 
     int input_index = 0;
 
-    for (
-        list<
-            pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> >
-        >::const_iterator traversing = found.begin();
-        found.end() != traversing;
-        traversing++,
-        input_index++
-    ) {
+    for (list< pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> > >::const_iterator traversing = found.begin(); found.end() != traversing; traversing++, input_index++ ) {
         CTxIn& input = rawTx.vin[input_index];
         input.prevout = COutPoint(funded_tx, traversing->first.first);
         inputs.push_back(make_pair(&input, input_index));
@@ -4890,14 +4895,7 @@ CTransaction CreateTransferFinalize(
 
     list<pair<CTxIn*, int> >::const_iterator input = inputs.begin();
 
-    for (
-        list<
-            pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> >
-        >::const_iterator traversing = found.begin();
-        found.end() != traversing;
-        traversing++,
-        input++
-    ) {
+    for (list< pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> > >::const_iterator traversing = found.begin(); found.end() != traversing;  traversing++, input++ ) {
         uint256 const script_hash = SignatureHash(traversing->first.second->scriptPubKey, rawTx, input->second, SIGHASH_ALL );
 
         CKeyID const keyID = uint160(traversing->second.first);

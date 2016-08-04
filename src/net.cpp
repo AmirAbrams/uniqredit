@@ -16,10 +16,13 @@
 #include "crypto/common.h"
 #include "crypto/sha256.h"
 #include "hash.h"
+#include "base58.h"
 #include "primitives/transaction.h"
 #include "scheduler.h"
 #include "ui_interface.h"
 #include "utilstrencodings.h"
+#include "arith_uint256.h"
+#include "uint256.h"
 
 #include <vector>
 
@@ -63,6 +66,7 @@
 #endif
 #endif
 
+using namespace std;
 
 namespace {
     const int MAX_OUTBOUND_CONNECTIONS = 8;
@@ -2510,6 +2514,8 @@ CNode::CNode(SOCKET hSocketIn, const CAddress& addrIn, const std::string& addrNa
     nPingUsecStart = 0;
     nPingUsecTime = 0;
     fPingQueued = false;
+    sBlockchain = "Uniqredit";
+    fForeignNode = false; 
     nMinPingUsecTime = std::numeric_limits<int64_t>::max();
     minFeeFilter = 0;
     lastSentFeeFilter = 0;

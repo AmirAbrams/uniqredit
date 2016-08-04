@@ -80,6 +80,40 @@ static bool SignStep(const BaseSignatureCreator& creator, const CScript& scriptP
     case TX_PUBKEY:
         keyID = CPubKey(vSolutions[0]).GetID();
         return Sign1(keyID, creator, scriptPubKey, scriptSigRet);
+    case TX_ESCROW_FEE:
+        keyID = CKeyID(uint160(vSolutions[1]));
+        if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet))
+            return false;
+        else
+        {
+            CPubKey vch;
+            creator.KeyStore().GetPubKey(keyID, vch);
+            scriptSigRet << ToByteVector(vch);
+        }
+        return true;
+    case TX_ESCROW_SENDER:
+    case TX_ESCROW:
+        keyID = CKeyID(uint160(vSolutions[4]));
+        if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet))
+            return false;
+        else
+        {
+            CPubKey vch;
+            creator.KeyStore().GetPubKey(keyID, vch);
+            scriptSigRet << ToByteVector(vch);
+        }
+        return true;
+    case TX_PUBKEYHASH_NONCED:
+        keyID = CKeyID(uint160(vSolutions[1]));
+        if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet))
+            return false;
+        else
+        {
+            CPubKey vch;
+            creator.KeyStore().GetPubKey(keyID, vch);
+            scriptSigRet << ToByteVector(vch);
+        }
+        return true;
     case TX_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
         if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet))
@@ -223,6 +257,10 @@ static CScript CombineSignatures(const CScript& scriptPubKey, const BaseSignatur
             return PushAll(sigs1);
         return PushAll(sigs2);
     case TX_PUBKEY:
+    case TX_PUBKEYHASH_NONCED:
+    case TX_ESCROW_FEE:
+    case TX_ESCROW_SENDER:
+    case TX_ESCROW:     
     case TX_PUBKEYHASH:
         // Signatures are bigger than placeholders or empty scripts:
         if (sigs1.empty() || sigs1[0].empty())

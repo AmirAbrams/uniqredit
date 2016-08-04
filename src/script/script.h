@@ -177,8 +177,13 @@ enum opcodetype
     OP_NOP9 = 0xb8,
     OP_NOP10 = 0xb9,
 
+    OP_CHECKDATASIG = 0xba,
+    OP_CHECKTRANSFERNONCE = 0xbb,
+    OP_CHECKEXPIRY = 0xbc,
 
     // template matching params
+    OP_NONCE = 0xf8,
+    OP_NUMERIC = 0xf0,
     OP_SMALLINTEGER = 0xfa,
     OP_PUBKEYS = 0xfb,
     OP_PUBKEYHASH = 0xfd,
@@ -636,6 +641,7 @@ public:
         return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE);
     }
 
+    std::string ToString() const;
     void clear()
     {
         // The default std::vector::clear() does not release memory.

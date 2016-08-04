@@ -480,6 +480,11 @@ std::string HelpMessage(HelpMessageMode mode)
         strUsage += HelpMessageOpt("-rpcservertimeout=<n>", strprintf("Timeout during HTTP requests (default: %d)", DEFAULT_HTTP_SERVER_TIMEOUT));
     }
 
+    strUsage += HelpMessageGroup(_("Secure messaging options:"));
+    strUsage += HelpMessageOpt("-nosmsg", _("Disable secure messaging"));
+    strUsage += HelpMessageOpt("-debugsmsg", _("Log extra debug messages"));
+    strUsage += HelpMessageOpt("-smsgscanchain", _("Scan the block chain for public key addresses on startup."));
+
     return strUsage;
 }
 
@@ -866,6 +871,20 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (GetBoolArg("-nodebug", false) || find(categories.begin(), categories.end(), string("0")) != categories.end())
         fDebug = false;
 
+    if (fDebug)
+    {
+        SoftSetBoolArg("-debugsmsg", true);
+
+    };
+
+    fDebugSmsg = GetBoolArg("-debugsmsg", false);
+
+    fNoSmsg = GetBoolArg("-nosmsg", false);
+
+   /*** MEGANET Services 
+    fAssetsEnabled = GetBoolArg("-assets", true);
+    fIbtpEnabled = GetBoolArg("-meganet", true);
+***/
     // Check for -debugnet
     if (GetBoolArg("-debugnet", false))
         InitWarning(_("Unsupported argument -debugnet ignored, use -debug=net."));

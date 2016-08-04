@@ -258,6 +258,7 @@ HEADERS +=  src/addrman.h \
   src/script/sign.h \
   src/script/standard.h \
   src/script/ismine.h \
+  src/smessage.h \
   src/streams.h \
   src/support/allocators/secure.h \
   src/support/allocators/zeroafterfree.h \
@@ -388,6 +389,7 @@ SOURCES += \
   src/rpc/server.cpp \
   src/script/sigcache.cpp \
   src/script/ismine.cpp \
+  src/smessage.cpp \
   src/timedata.cpp \
   src/torcontrol.cpp \
   src/trust.cpp \

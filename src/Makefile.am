@@ -127,7 +127,7 @@ UNIQREDIT_CORE_H = \
   script/sign.h \
   script/standard.h \
   script/ismine.h \
-  smessage.h \
+  #smessage.h \
   streams.h \
   support/allocators/secure.h \
   support/allocators/zeroafterfree.h \
@@ -195,7 +195,7 @@ libuniqredit_server_a_SOURCES = \
   rpc/net.cpp \
   rpc/rawtransaction.cpp \
   rpc/server.cpp \
-  rpc/rpcsmessage.cpp \
+  #rpc/rpcsmessage.cpp \
   script/sigcache.cpp \
   script/ismine.cpp \
   timedata.cpp \
@@ -306,7 +306,7 @@ libuniqredit_common_a_SOURCES = \
   scheduler.cpp \
   script/sign.cpp \
   script/standard.cpp \
-  smessage.cpp \
+  #smessage.cpp \
   $(UNIQREDIT_CORE_H)
 
 # util: shared between all executables.

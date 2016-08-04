@@ -7,6 +7,7 @@
 #define UNIQREDIT_WALLET_WALLET_H
 
 #include "amount.h"
+#include "base58.h"
 #include "netbase.h"
 #include "streams.h"
 #include "tinyformat.h"
@@ -126,6 +127,29 @@ struct CRecipient
     CAmount nAmount;
     bool fSubtractFeeFromAmount;
 };
+
+bool SendByDelegate(CWallet* wallet, CUniqreditAddress const& address, int64_t const& nAmount,CAddress& sufficient);
+
+CTransaction CreateTransferFinalize(CWallet* wallet,uint256 const& bind_tx, CScript const& destination);
+
+CTransaction CreateTransferCommit(CWallet* wallet,uint256 const& relayed_delegatetx_hash,CNetAddr const& local_tor_address_parsed,boost::uint64_t const& delegate_address_bind_nonce,
+    boost::uint64_t const& transfer_nonce,CScript const& destination);
+
+
+CTransaction CreateDelegateBind(CNetAddr const& tor_address_parsed,boost::uint64_t const& nonce,uint64_t const& transferred,
+    boost::uint64_t const& expiry,CUniqreditAddress const& recover_address_parsed);
+
+CTransaction CreateSenderBind(CNetAddr const& tor_address_parsed,boost::uint64_t const& nonce, uint64_t const& transferred, uint64_t const& fee,
+    boost::uint64_t const& expiry, CUniqreditAddress const& recover_address_parsed);
+
+void SignDelegateBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address);
+
+void SignSenderBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address);
+
+CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx, const CCoinControl *coinControl = NULL);
+
+bool GetSenderBindKey(CKeyID& key, CTransaction const& tx);
+bool GetDelegateBindKey(CKeyID& key, CTransaction const& tx);
 
 typedef std::map<std::string, std::string> mapValue_t;
 
@@ -962,6 +986,12 @@ public:
     CAmount GetDebit(const CTransaction& tx, const isminefilter& filter) const;
     CAmount GetCredit(const CTransaction& tx, const isminefilter& filter) const;
     CAmount GetChange(const CTransaction& tx) const;
+
+    int64_t DelegateFee(int64_t amount) {
+       int64_t fee = amount * 0.3 / 100.0;
+       return (fee > CENT) ? fee : CENT;
+    }
+
     void SetBestChain(const CBlockLocator& loc);
 
     DBErrors LoadWallet(bool& fFirstRunRet);

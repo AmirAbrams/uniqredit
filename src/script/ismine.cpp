@@ -56,6 +56,15 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey)
         if (keystore.HaveKey(keyID))
             return ISMINE_SPENDABLE;
         break;
+    case TX_ESCROW_FEE:
+    case TX_ESCROW_SENDER:
+    case TX_ESCROW:
+        break;
+    case TX_PUBKEYHASH_NONCED:
+        keyID = CKeyID(uint160(vSolutions[1]));
+        if (keystore.HaveKey(keyID))
+            return ISMINE_SPENDABLE;
+        break; 
     case TX_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
         if (keystore.HaveKey(keyID))

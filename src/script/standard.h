@@ -46,6 +46,10 @@ enum txnouttype
 {
     TX_NONSTANDARD,
     // 'standard' transaction types:
+    TX_ESCROW_FEE,
+    TX_ESCROW_SENDER,
+    TX_ESCROW,
+    TX_PUBKEYHASH_NONCED,
     TX_PUBKEY,
     TX_PUBKEYHASH,
     TX_SCRIPTHASH,
@@ -71,6 +75,7 @@ typedef boost::variant<CNoDestination, CKeyID, CScriptID> CTxDestination;
 const char* GetTxnOutputType(txnouttype t);
 
 bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<std::vector<unsigned char> >& vSolutionsRet);
+int ScriptSigArgsExpected(txnouttype t, const std::vector<std::vector<unsigned char> >& vSolutions);
 bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet);
 bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<CTxDestination>& addressRet, int& nRequiredRet);
 

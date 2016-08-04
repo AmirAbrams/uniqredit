@@ -2482,7 +2482,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 	std::map<std::string, double>::iterator donorit;
 	std::map<std::string, double> donors = getdonors();
 
-	if(chainActive.Tip()->nHeight > 20000){
+	if(chainActive.Tip()->nHeight > 40000){
 
 		for (unsigned int i = 0; i < block.vtx[0].vout.size(); i++){
 

@@ -28,7 +28,7 @@ Notes:
 */
 
 #include "smessage.h"
-
+#include "chainparams.h"
 #include <stdint.h>
 #include <time.h>
 #include <map>
@@ -37,6 +37,7 @@ Notes:
 #include <errno.h>
 
 #include <secp256k1.h>
+#include <secp256k1_recovery.h>
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 #include "crypto/sha512.h"
@@ -53,28 +54,14 @@ Notes:
 #include "wallet/crypter.h"
 #include "db.h"
 #include "init.h"
+#include "main.h"
 #include "rpc/protocol.h"
 #include "dbwrapper.h"
 #include "lz4/lz4.c"
 #include "xxhash/xxhash.h"
 #include "xxhash/xxhash.c"
 
-
-//! anonymous namespace
-namespace {
-
-class CSecp256k1Init {
-public:
-    CSecp256k1Init() {
-        secp256k1_start(SECP256K1_START_VERIFY);
-    }
-    ~CSecp256k1Init() {
-        secp256k1_stop();
-    }
-};
-static CSecp256k1Init instance_of_csecp256k1;
-}
-
+static secp256k1_context* secp256k1_context_sign = NULL;
 
 static bool DeriveKey(secure_buffer &vchP, const CKey &keyR, const CPubKey &cpkDestK)
 {
@@ -82,7 +69,6 @@ static bool DeriveKey(secure_buffer &vchP, const CKey &keyR, const CPubKey &cpkD
     secure_buffer r(keyR.begin(), keyR.end());
     return secp256k1_ec_pubkey_tweak_mul(&vchP[0], vchP.size(), &r[0]);
 }
-
 
 // TODO: For buckets older than current, only need to store no. messages and hash in memory
 
@@ -1789,7 +1775,7 @@ static bool ScanBlock(CBlock& block, SecMsgDB& addrpkdb, uint32_t& nTransactions
                     prevoutHash = tx.vin[i].prevout.hash;
                     CTransaction txOfPrevOutput;
 
-                    if (!GetTransaction(prevoutHash, txOfPrevOutput, blockHash, true))
+                    if (!GetTransaction(prevoutHash, txOfPrevOutput, Params().GetConsensus(), blockHash, true))
                     {
                         LogPrintf("Could not get transaction %s (output %d) referenced by input #%d of transaction %s in block %s\n", prevoutHash.ToString().c_str(), tx.vin[i].prevout.n, (int) i, tx.GetHash().ToString().c_str(), block.GetHash().ToString().c_str());
                         continue;
@@ -1907,7 +1893,7 @@ bool ScanChainForPublicKeys(CBlockIndex* pindexStart, size_t n)
         {
             nBlocks++;
             CBlock block;
-            ReadBlockFromDisk(block, pindex);
+            ReadBlockFromDisk(block, pindex, Params().GetConsensus());
 
             ScanBlock(block, addrpkdb,
                 nTransactions, nInputs, nPubkeys, nDuplicates);
@@ -2492,7 +2478,7 @@ int SecureMsgReceive(CNode* pfrom, std::vector<unsigned char>& vchData)
         SecureMessageHeader header(&vchData[n]);
 
         int rv = SecureMsgValidate(header, vchData.size() - (n + SMSG_HDR_LEN));
-        string reason;
+        std::string reason;
         if (rv != 0) {
             Misbehaving(pfrom->GetId(), 0);
             if( rv==1 )

@@ -25,7 +25,7 @@ const unsigned int SMSG_HDR_LEN         = 84;                // length of unencr
 const unsigned int SMSG_PL_HDR_LEN      = 4+33+1+65;         // length of encrypted header in payload
 
 const unsigned int SMSG_BUCKET_LEN      = 60 * 10;           // in seconds
-const unsigned int SMSG_RETENTION       = 60 * 60 * 24 * 90;      // in seconds
+const unsigned int SMSG_RETENTION       = 60 * 60 * 24 * 180;      // in seconds
 const unsigned int SMSG_SEND_DELAY      = 2;                 // in seconds, SecureMsgSendData will delay this long between firing
 const unsigned int SMSG_THREAD_DELAY    = 5;
 
@@ -38,11 +38,7 @@ const unsigned int SMSG_MAX_MSG_BYTES   = 4096;              // the user input p
 // max size of payload worst case compression
 const unsigned int SMSG_MAX_MSG_WORST = LZ4_COMPRESSBOUND(SMSG_MAX_MSG_BYTES+SMSG_PL_HDR_LEN);
 
-
-
 #define SMSG_MASK_UNREAD            (1 << 0)
-
-
 
 extern bool fSecMsgEnabled;
 
