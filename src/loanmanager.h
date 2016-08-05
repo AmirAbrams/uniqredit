@@ -2,6 +2,7 @@
 #define LOAN_MANAGER_H 
 
 #include "amount.h"
+#include "base58.h"
 #include "util.h"
 #include "utilmoneystr.h"
 #include "bloom.h"
@@ -17,6 +18,12 @@
 #include "utilstrencodings.h"
 #include "primitives/transaction.h"
 #include "pubkey.h"
+
+#ifdef ENABLE_WALLET
+#include "wallet/db.h"
+#include "wallet/wallet.h"
+#include "wallet/walletdb.h"
+#endif
 
 #include <sqlite3.h>
 #include <iostream>
@@ -58,5 +65,11 @@ std::string CreateTransferEscrow (std::string const destination_address,uint256 
 std::string SendRetrieveTx(CTransaction tx, int depth);
 
 std::string CreateTransferExpiry(std::string const destination_address,uint256 const bind_tx,int depth);
+
+bool SendByDelegate(CWallet* wallet, CUniqreditAddress const& address, int64_t const& nAmount,CAddress& sufficient);
+
+void SignDelegateBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address);
+
+void SignSenderBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address);
 
 #endif

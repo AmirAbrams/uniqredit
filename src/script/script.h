@@ -17,6 +17,7 @@
 #include <string.h>
 #include <string>
 #include <vector>
+#include "pubkey.h"
 
 // Maximum number of bytes pushable to the stack
 static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 520;
@@ -432,6 +433,26 @@ public:
             throw std::runtime_error("CScript::operator<<(): invalid opcode");
         insert(end(), (unsigned char)opcode);
         return *this;
+    }
+
+    CScript& operator<<(const uint160& b)
+    {
+        insert(end(), sizeof(b));
+        insert(end(), (unsigned char*)&b, (unsigned char*)&b + sizeof(b));
+        return *this;
+    }
+
+    CScript& operator<<(const uint256& b)
+    {
+        insert(end(), sizeof(b));
+        insert(end(), (unsigned char*)&b, (unsigned char*)&b + sizeof(b));
+        return *this;
+    }
+
+    CScript& operator<<(const CPubKey& key)
+    {
+        std::vector<unsigned char> vchKey = std::vector<unsigned char>(key.begin(), key.end());
+        return (*this) << vchKey;
     }
 
     CScript& operator<<(const CScriptNum& b)

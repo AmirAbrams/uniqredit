@@ -31,6 +31,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
+#include <boost/lexical_cast.hpp>
 
 using namespace std;
 
@@ -84,6 +85,28 @@ const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
     if (it == mapWallet.end())
         return NULL;
     return &(it->second);
+}
+
+static bool ConfirmedTransactionSubmit(CTransaction sent_tx, CTransaction& confirming_tx) {
+    uint256 const tx_hash = sent_tx.GetHash();
+    CWalletTx mtx = CWalletTx(pwalletMain, sent_tx);
+
+    if (!mtx.AcceptToMemoryPool(true,maxTxFee)) {
+        return false;
+    }
+    SyncWithWallets(sent_tx, NULL);
+    RelayTransaction(sent_tx);
+
+    CMutableTransaction confirmTx;
+
+    CTxOut confirm_transfer;
+
+    confirm_transfer.scriptPubKey = CScript() << tx_hash;
+
+    confirmTx.vout.push_back(confirm_transfer);
+
+    confirming_tx = confirmTx;
+    return true;
 }
 
 static bool GetBoundAddress(CWallet* wallet, uint160 const& hash, CNetAddr& address) {
@@ -2134,6 +2157,263 @@ bool CWallet::FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, bool ov
     return true;
 }
 
+bool CWallet::CreateTransaction(const vector<pair<CScript, CAmount> >& vecSend,
+                                CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet,int& nChangePosInOut, std::string& strFailReason, const CCoinControl* coinControl, bool sign)
+{
+    CAmount nValue = 0;
+    unsigned int nSubtractFeeFromAmount = 0;
+    int nChangePosRequest = nChangePosInOut;
+    BOOST_FOREACH (const PAIRTYPE(CScript, CAmount)& s, vecSend)
+    {
+        if (nValue < 0)
+        {
+            strFailReason = _("Transaction amounts must be positive");
+            return false;
+        }
+        nValue += s.second;
+    }
+    if (vecSend.empty() || nValue < 0)
+    {
+        strFailReason = _("Transaction amounts must be positive");
+        return false;
+    }
+    wtxNew.fTimeReceivedIsTxTime = true;
+    wtxNew.BindWallet(this);
+    CMutableTransaction txNew;
+
+    // Discourage fee sniping.
+    //
+    // For a large miner the value of the transactions in the best block and
+    // the mempool can exceed the cost of deliberately attempting to mine two
+    // blocks to orphan the current best block. By setting nLockTime such that
+    // only the next block can include the transaction, we discourage this
+    // practice as the height restricted and limited blocksize gives miners
+    // considering fee sniping fewer options for pulling off this attack.
+    //
+    // A simple way to think about this is from the wallet's point of view we
+    // always want the blockchain to move forward. By setting nLockTime this
+    // way we're basically making the statement that we only want this
+    // transaction to appear in the next block; we don't want to potentially
+    // encourage reorgs by allowing transactions to appear at lower heights
+    // than the next block in forks of the best chain.
+    //
+    // Of course, the subsidy is high enough, and transaction volume low
+    // enough, that fee sniping isn't a problem yet, but by implementing a fix
+    // now we ensure code won't be written that makes assumptions about
+    // nLockTime that preclude a fix later.
+    txNew.nLockTime = chainActive.Height();
+
+    // Secondly occasionally randomly pick a nLockTime even further back, so
+    // that transactions that are delayed after signing for whatever reason,
+    // e.g. high-latency mix networks and some CoinJoin implementations, have
+    // better privacy.
+    if (GetRandInt(10) == 0)
+        txNew.nLockTime = std::max(0, (int)txNew.nLockTime - GetRandInt(100));
+
+    assert(txNew.nLockTime <= (unsigned int)chainActive.Height());
+    assert(txNew.nLockTime < LOCKTIME_THRESHOLD);
+
+    {
+        LOCK2(cs_main, cs_wallet);
+        {
+            std::vector<COutput> vAvailableCoins;
+            AvailableCoins(vAvailableCoins, true, coinControl);
+
+            nFeeRet = 0;
+            // Start with no fee and loop until there is enough fee
+            while (true)
+            {
+                nChangePosInOut = nChangePosRequest;
+                txNew.vin.clear();
+                txNew.vout.clear();
+                wtxNew.fFromMe = true;
+                bool fFirst = true;
+
+                CAmount nValueToSelect = nValue;
+                if (nSubtractFeeFromAmount == 0)
+                    nValueToSelect += nFeeRet;
+                double dPriority = 0;
+                // vouts to the payees
+                BOOST_FOREACH (const PAIRTYPE(CScript, CAmount)& s, vecSend)
+                {
+                    CTxOut txout(s.second, s.first);
+                    if (txout.IsDust(::minRelayTxFee))
+                    {
+                        strFailReason = _("Transaction amount too small");
+                        return false;
+                    }
+                    txNew.vout.push_back(txout);
+                }
+
+                // Choose coins to use
+                set<pair<const CWalletTx*,unsigned int> > setCoins;
+                CAmount nValueIn = 0;
+                if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl))
+                {
+                    strFailReason = _("Insufficient funds");
+                    return false;
+                }
+                BOOST_FOREACH(PAIRTYPE(const CWalletTx*, unsigned int) pcoin, setCoins)
+                {
+                    CAmount nCredit = pcoin.first->vout[pcoin.second].nValue;
+                    //The coin age after the next block (depth+1) is used instead of the current,
+                    //reflecting an assumption the user would accept a bit more delay for
+                    //a chance at a free transaction.
+                    //But mempool inputs might still be in the mempool, so their age stays 0
+                    int age = pcoin.first->GetDepthInMainChain();
+                    assert(age >= 0);
+                    if (age != 0)
+                        age += 1;
+                    dPriority += (double)nCredit * age;
+                }
+
+                const CAmount nChange = nValueIn - nValueToSelect;
+                if (nChange > 0)
+                {
+                    // Fill a vout to ourself
+                    // TODO: pass in scriptChange instead of reservekey so
+                    // change transaction isn't always pay-to-uniqredit-address
+                    CScript scriptChange;
+
+                    // coin control: send change to custom address
+                    if (coinControl && !boost::get<CNoDestination>(&coinControl->destChange))
+                        scriptChange = GetScriptForDestination(coinControl->destChange);
+
+                    // no coin control: send change to newly generated address
+                    else
+                    {
+                        // Note: We use a new key here to keep it from being obvious which side is the change.
+                        //  The drawback is that by not reusing a previous key, the change may be lost if a
+                        //  backup is restored, if the backup doesn't have the new private key for the change.
+                        //  If we reused the old key, it would be possible to add code to look for and
+                        //  rediscover unknown transactions that were written with keys of ours to recover
+                        //  post-backup change.
+
+                        // Reserve a new key pair from key pool
+                        CPubKey vchPubKey;
+                        bool ret;
+                        ret = reservekey.GetReservedKey(vchPubKey);
+                        assert(ret); // should never fail, as we just unlocked
+
+                        scriptChange = GetScriptForDestination(vchPubKey.GetID());
+                    }
+
+                    CTxOut newTxOut(nChange, scriptChange);
+
+                    // Never create dust outputs; if we would, just
+                    // add the dust to the fee.
+                    if (newTxOut.IsDust(::minRelayTxFee))
+                    {
+                        nChangePosInOut = -1;
+                        nFeeRet += nChange;
+                        reservekey.ReturnKey();
+                    }
+                    else
+                    {
+                        if (nChangePosInOut == -1)
+                        {
+                            // Insert change txn at random position:
+                            nChangePosInOut = GetRandInt(txNew.vout.size()+1);
+                        }
+                        else if ((unsigned int)nChangePosInOut > txNew.vout.size())
+                        {
+                            strFailReason = _("Change index out of range");
+                            return false;
+                        }
+
+                        vector<CTxOut>::iterator position = txNew.vout.begin()+nChangePosInOut;
+                        txNew.vout.insert(position, newTxOut);
+                    }
+                }
+                else
+                    reservekey.ReturnKey();
+
+                // Fill vin
+                //
+                // Note how the sequence number is set to max()-1 so that the
+                // nLockTime set above actually works.
+                BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
+                    txNew.vin.push_back(CTxIn(coin.first->GetHash(),coin.second,CScript(),
+                                              std::numeric_limits<unsigned int>::max()-1));
+
+                // Sign
+                int nIn = 0;
+                CTransaction txNewConst(txNew);
+                BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
+                {
+                    bool signSuccess;
+                    const CScript& scriptPubKey = coin.first->vout[coin.second].scriptPubKey;
+                    CScript& scriptSigRes = txNew.vin[nIn].scriptSig;
+                    if (sign)
+                        signSuccess = ProduceSignature(TransactionSignatureCreator(this, &txNewConst, nIn, SIGHASH_ALL), scriptPubKey, scriptSigRes);
+                    else
+                        signSuccess = ProduceSignature(DummySignatureCreator(this), scriptPubKey, scriptSigRes);
+
+                    if (!signSuccess)
+                    {
+                        strFailReason = _("Signing transaction failed");
+                        return false;
+                    }
+                    nIn++;
+                }
+
+                unsigned int nBytes = ::GetSerializeSize(txNew, SER_NETWORK, PROTOCOL_VERSION);
+
+                // Remove scriptSigs if we used dummy signatures for fee calculation
+                if (!sign) {
+                    BOOST_FOREACH (CTxIn& vin, txNew.vin)
+                        vin.scriptSig = CScript();
+                }
+
+                // Embed the constructed transaction data in wtxNew.
+                *static_cast<CTransaction*>(&wtxNew) = CTransaction(txNew);
+
+                // Limit size
+                if (nBytes >= MAX_STANDARD_TX_SIZE)
+                {
+                    strFailReason = _("Transaction too large");
+                    return false;
+                }
+                dPriority = wtxNew.ComputePriority(dPriority, nBytes);
+
+                // Can we complete this as a free transaction?
+                if (fSendFreeTransactions && nBytes <= MAX_FREE_TRANSACTION_CREATE_SIZE)
+                {
+                    // Not enough fee: enough priority?
+                    double dPriorityNeeded = mempool.estimateSmartPriority(nTxConfirmTarget);
+                    // Require at least hard-coded AllowFree.
+                    if (dPriority >= dPriorityNeeded && AllowFree(dPriority))
+                        break;
+                }
+
+                CAmount nFeeNeeded = GetMinimumFee(nBytes, nTxConfirmTarget, mempool);
+                if (coinControl && nFeeNeeded > 0 && coinControl->nMinimumTotalFee > nFeeNeeded) {
+                    nFeeNeeded = coinControl->nMinimumTotalFee;
+                }
+                if (coinControl && coinControl->fOverrideFeeRate)
+                    nFeeNeeded = coinControl->nFeeRate.GetFee(nBytes);
+
+                // If we made it here and we aren't even able to meet the relay fee on the next pass, give up
+                // because we must be at the maximum allowed fee.
+                if (nFeeNeeded < ::minRelayTxFee.GetFee(nBytes))
+                {
+                    strFailReason = _("Transaction too large for fee policy");
+                    return false;
+                }
+
+                if (nFeeRet >= nFeeNeeded)
+                    break; // Done, enough fee included.
+
+                // Include more fee and try again.
+                nFeeRet = nFeeNeeded;
+                continue;
+            }
+        }
+    }
+    return true;
+}
+
+
 bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet,
                                 int& nChangePosInOut, std::string& strFailReason, const CCoinControl* coinControl, bool sign)
 {
@@ -3288,7 +3568,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
             wallet->store_address_bind(sender_address, sender_address_bind_nonce);
 
-            if (fDebug) printf("Address bind: address %s nonce %"PRIu64"\n", sender_address.ToString().c_str(),sender_address_bind_nonce);
+            if (fDebug) printf("Address bind: address %s nonce %lu\n", sender_address.ToString().c_str(),sender_address_bind_nonce);
 
             confirm_transfer.scriptPubKey = CScript() << data << sender_address_bind_nonce;
 
@@ -3296,17 +3576,9 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
             PushOffChain(sender_address, "confirm-delegate", confirmTx);
 
-            CNetAddr const local = GetLocalTorAddress(sender_address);
+            CNetAddr const local = GetLocalAddress(sender_address);
 
-            std::vector<
-                unsigned char
-            > const key = wallet->store_delegate_attempt(
-                true,
-                local,
-                sender_address,
-                CScript(position, payload.end()),
-                payload_output.nValue
-            );
+            std::vector<unsigned char> const key = wallet->store_delegate_attempt(true, local, sender_address, CScript(position, payload.end()), payload_output.nValue);
 
             wallet->store_join_nonce_delegate(join_nonce, key);
 
@@ -3317,11 +3589,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
             delegate_identification_request.vout.push_back(request_transfer);
 
-            PushOffChain(
-                sender_address,
-                "request-delegate-identification",
-                delegate_identification_request
-            );
+            PushOffChain(sender_address, "request-delegate-identification", delegate_identification_request);
 
             return true;
         } else {
@@ -3337,13 +3605,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         opcodetype opcode;
         std::vector<unsigned char> my_key;
         std::vector<unsigned char> data;
-        std::pair<
-            bool,
-            std::pair<
-                std::pair<CNetAddr, CNetAddr>,
-                std::pair<CScript, uint64_t>
-            >
-        > my_delegate_data;
+        std::pair< bool, std::pair< std::pair<CNetAddr, CNetAddr>, std::pair<CScript, uint64_t>  > > my_delegate_data;
         CScript::const_iterator position = payload.begin();
         if (position >= payload.end()) {
             return false;
@@ -3403,13 +3665,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         std::vector<unsigned char> delegate_key;
         std::vector<unsigned char> data;
 
-        std::pair<
-            bool,
-            std::pair<
-                std::pair<CNetAddr, CNetAddr>,
-                std::pair<CScript, uint64_t>
-            >
-        > delegate_data;
+        std::pair< bool, std::pair< std::pair<CNetAddr, CNetAddr>, std::pair<CScript, uint64_t> > > delegate_data;
 
         CScript::const_iterator position = payload.begin();
         if (position >= payload.end()) {
@@ -3442,21 +3698,12 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             }
             memcpy(&delegate_address_bind_nonce, data.data(), sizeof(delegate_address_bind_nonce));
 
-            if (fDebug) printf("Delegate read delegate bind nonce : %"PRIu64"\n",delegate_address_bind_nonce);
+            if (fDebug) printf("Delegate read delegate bind nonce : %lu\n",delegate_address_bind_nonce);
 
             //DELRET 1
-            InitializeDelegateBind(
-                delegate_key,
-                delegate_address_bind_nonce,
-                delegate_data.second.first.first,
-                delegate_data.second.first.second,
-                delegate_data.second.second.second
-
-            );
-            wallet->store_delegate_nonce(
-                delegate_address_bind_nonce,
-                delegate_key
-            );
+            InitializeDelegateBind(delegate_key,
+                delegate_address_bind_nonce, delegate_data.second.first.first,delegate_data.second.first.second, delegate_data.second.second.second );
+            wallet->store_delegate_nonce(delegate_address_bind_nonce, delegate_key);
 
 
             return true;
@@ -3471,13 +3718,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         }
 
         CNetAddr sender_address;
-        if (
-            !GetBoundAddress(
-                wallet,
-                id_hash,
-                sender_address
-            )
-        ) {
+        if (!GetBoundAddress(wallet,id_hash, sender_address)) {
             return false;
         }
         CMutableTransaction signed_tx = tx;
@@ -3496,11 +3737,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
         SignSenderBind(wallet, signed_tx, signing_address);
 
-        PushOffChain(
-            sender_address,
-            "request-sender-funding",
-            signed_tx
-        );
+        PushOffChain(sender_address, "request-sender-funding", signed_tx);
 
          return true;
 
@@ -3512,12 +3749,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         }
         CNetAddr delegate_address;
         if (
-            !GetBoundAddress(
-                wallet,
-                delegate_id_hash,
-                delegate_address
-            )
-        ) {
+            !GetBoundAddress(wallet, delegate_id_hash, delegate_address)) {
             return false;
         }
         CMutableTransaction signed_tx = tx;
@@ -3536,11 +3768,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
         SignDelegateBind(wallet, signed_tx, signing_address);
 
-        PushOffChain(
-            delegate_address,
-            "request-delegate-funding",
-            signed_tx
-        );
+        PushOffChain(delegate_address, "request-delegate-funding", signed_tx);
 
         return true;
     } else if ("request-sender-funding" == name) {
@@ -3585,12 +3813,12 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         }
         wallet->add_to_retrieval_string_in_nonce_map(nonce, funded_txid,false);
         if (fDebug) {
-            printf("Added to sender retrieval string at nonce %"PRIu64" funded tx id %s \n",
+            printf("Added to sender retrieval string at nonce %lu funded tx id %s \n",
                    nonce,  funded_txid.c_str());
         }
         std::string retrieve;
         if (!wallet->read_retrieval_string_from_nonce_map(nonce, retrieve, false)) {
-           printf("Could not get retrieve string for nonce %"PRIu64" while processing confirm-sender-bind\n",
+           printf("Could not get retrieve string for nonce %lu while processing confirm-sender-bind\n",
            nonce);
         } else {
            if (wallet->StoreRetrieveStringToDB(funded_tx.GetHash(), retrieve, false)) {
@@ -3648,7 +3876,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         std::string relayed_delegate_tx_id;
 
         if (wallet->ReadRetrieveStringFromHashMap(sender_funded_tx, relayed_delegate_tx_id, true)) {
-            uint256 relayed_delegate_hash = uint256(relayed_delegate_tx_id);
+            uint256 relayed_delegate_hash =uint256S(itostr(relayed_delegate_tx_id));
             //as transfer has been finalized, we no longer need to retrieve
             wallet->DeleteRetrieveStringFromDB(relayed_delegate_hash);
             wallet->DeleteRetrieveStringFromDB(sender_funded_tx);
@@ -3690,13 +3918,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         CNetAddr sender_address;
-        if (
-            !GetBoundAddress(
-                wallet,
-                hash,
-                sender_address
-            )
-        ) {
+        if (!GetBoundAddress(wallet,hash, sender_address )) {
             return false;
         }
         CTransaction confirmTx;
@@ -3755,9 +3977,9 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         } else {
             return false;
         }
-        uint256 hashBlock = 0;
+        uint256 hashBlock = uint256S(itostr(0));
         CTransaction transfer_tx;
-        if (!GetTransaction(transfer_txid, transfer_tx, hashBlock)) {
+        if (!GetTransaction(transfer_txid, transfer_tx,Params().GetConsensus(), hashBlock)) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -3765,7 +3987,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             );
             return true;
         }
-        if (0 == hashBlock) {
+        if (uint256S(itostr(0)) == hashBlock) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -3780,16 +4002,10 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         uint256 relayed_delegate_hash = transfer_tx.vin[0].prevout.hash;
 
         CTransaction prevTx;
-        if (
-            !GetTransaction(
-                relayed_delegate_hash,
-                prevTx,
-                hashBlock
-            )
-        ) {
+        if (!GetTransaction(relayed_delegate_hash, prevTx,Params().GetConsensus(), hashBlock ) ) {
             return false;
         }
-        if (0 == hashBlock) {
+        if (uint256S(itostr(0)) == hashBlock) {
             return false;
         }
 
@@ -3854,27 +4070,14 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         CTransaction prevTx;
-        uint256 hashBlock = 0;
+        uint256 hashBlock = uint256S(itostr(0));
         if (
-            !GetTransaction(
-                committed_tx.vin[0].prevout.hash,
-                prevTx,
-                hashBlock
-            )
-        ) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            !GetTransaction( committed_tx.vin[0].prevout.hash, prevTx,Params().GetConsensus(), hashBlock ) ) {
+            wallet->push_deferred_off_chain_transaction(timeout,name,tx );
             return true;
         }
-        if (0 == hashBlock) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+        if (uint256S(itostr(0)) == hashBlock) {
+            wallet->push_deferred_off_chain_transaction( timeout, name,tx );
             return true;
         }
         uint160 delegate_id_hash;
@@ -3882,21 +4085,13 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         CNetAddr delegate_address;
-        if (
-            !GetBoundAddress(
-                wallet,
-                delegate_id_hash,
-                delegate_address
-            )
-        ) {
+        if (!GetBoundAddress(wallet, delegate_id_hash, delegate_address) ) {
             return false;
         }
         CTransaction confirmTx;
         if (!ConfirmedTransactionSubmit(committed_tx, confirmTx)) {
             return false;
         }
-
-
 
         PushOffChain(delegate_address, "confirm-transfer", confirmTx);
 
@@ -3922,7 +4117,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         CTransaction transfer_tx;
-        if (!GetTransaction(transfer_txid, transfer_tx, hashBlock)) {
+        if (!GetTransaction(transfer_txid, transfer_tx,Params().GetConsensus(), hashBlock)) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -3930,7 +4125,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             );
             return true;
         }
-        if (0 == hashBlock) {
+        if (uint256S(itostr(0)) == hashBlock) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -3941,16 +4136,10 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         if (transfer_tx.vin.empty()) {
             return false;
         }
-        if (
-            !GetTransaction(
-                transfer_tx.vin[0].prevout.hash,
-                prevTx,
-                hashBlock
-            )
-        ) {
+        if (!GetTransaction( transfer_tx.vin[0].prevout.hash,prevTx,Params().GetConsensus(), hashBlock )) {
             return false;
         }
-        if (0 == hashBlock) {
+        if (uint256S(itostr(0)) == hashBlock) {
             return false;
         }
 
@@ -4005,7 +4194,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
 
         uint256 hash;
         if (!wallet->get_hash_from_expiry_nonce_map(nonce, hash)) {
-             printf("Could not get tx hash for nonce %"PRIu64" while processing committed-transfer", nonce);
+             printf("Could not get tx hash for nonce %lu while processing committed-transfer", nonce);
              return true;
         }
 
@@ -4043,8 +4232,8 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         }
 
         CTransaction prevTx;
-        uint256 hashBlock = 0;
-        if (!GetTransaction(relayed_sender_tx_hash, prevTx, hashBlock)) {
+        uint256 hashBlock = uint256S(itostr(0));
+        if (!GetTransaction(relayed_sender_tx_hash, prevTx,Params().GetConsensus(), hashBlock)) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -4052,7 +4241,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             );
             return true;
         }
-        if (0 == hashBlock) {
+        if (uint256S(itostr(0)) == hashBlock) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -4111,8 +4300,8 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         CTransaction prevTx;
-        uint256 hashBlock = 0;
-        if (!GetTransaction(relayed_delegatetx_hash, prevTx, hashBlock)) {
+        uint256 hashBlock = uint256S(itostr(0));
+        if (!GetTransaction(relayed_delegatetx_hash, prevTx,Params().GetConsensus(), hashBlock)) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -4120,7 +4309,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             );
             return true;
         }
-        if (0 == hashBlock) {
+        if (uint256S(itostr(0)) == hashBlock) {
             wallet->push_deferred_off_chain_transaction(
                 timeout,
                 name,
@@ -4284,27 +4473,21 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
    }
 
 
-CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx, const CCoinControl* coinControl) {
+CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx, const CCoinControl coinControl) {
     CWalletTx fundedTx;
 
     CReserveKey reserve_key(wallet);
-
+int nChangePosRet = -1;
     int64_t fee = 0;
 
     vector<pair<CScript, int64_t> > send_vector;
 
-    for (
-        vector<CTxOut>::iterator output = unfundedTx.vout.begin();
-        unfundedTx.vout.end() != output;
-        output++
-    ) {
-        send_vector.push_back(
-            std::make_pair(output->scriptPubKey, output->nValue)
-        );
+    for ( vector<CTxOut>::iterator output = unfundedTx.vout.begin();  unfundedTx.vout.end() != output;  output++ ) {
+        send_vector.push_back( std::make_pair(output->scriptPubKey, output->nValue) );
     }
 	std::string strFail = "";
 	
-    if (!wallet->CreateTransaction(send_vector, fundedTx, reserve_key, fee,strFail, coinControl)) {
+    if (!wallet->CreateTransaction(send_vector, fundedTx, reserve_key, fee, nChangePosRet,strFail, &coinControl, false)) {
         throw runtime_error("fundaddressbind error ");
     }
 
@@ -4512,184 +4695,12 @@ std::set<std::pair<CNetAddr, uint64_t> >& CWallet::get_address_binds() {
     return address_binds;
 }
 
-bool CWallet::get_hash_delegate(
-    uint160 const& hash,
-    std::vector<unsigned char>& key
-) {
+bool CWallet::get_hash_delegate(uint160 const& hash,std::vector<unsigned char>& key) {
     if (hash_delegates.end() == hash_delegates.find(hash)) {
         return false;
     }
     key = hash_delegates.at(hash);
     return true;
-}
-
-bool SendByDelegate(
-    CWallet* wallet,
-    CUniqreditAddress const& address,
-    int64_t const& nAmount,
-    CAddress& sufficient
-) {
-
-    CScript address_script;
-
-    address_script= GetScriptForDestination(address.Get());
-
-    std::map<CAddress, uint64_t> advertised_balances = ListAdvertisedBalances();
-
-    bool found = false;
-
-    //find delegate candidate
-    for (
-        std::map<
-            CAddress,
-            uint64_t
-        >::const_iterator address = advertised_balances.begin();
-        advertised_balances.end() != address;
-        address++
-    ) {
-        if (nAmount <= (int64_t)address->second) {
-            found = true;
-            sufficient = address->first;
-            break;
-        }
-    }
-
-    if (!found) {
-        return false;
-    }
-
-    CNetAddr const local = sufficient;
-
-    vector<unsigned char> identification(16);
-
-    for (
-        int filling = 0;
-        16 > filling;
-        filling++
-    ) {
-        identification[filling] = local.GetByte(15 - filling);
-    }
-
-    uint64_t const join_nonce = GetRand(std::numeric_limits<uint64_t>::max());
-
-    std::vector<unsigned char> const key = wallet->store_delegate_attempt(
-        false,
-        local,
-        sufficient,
-        address_script,
-        nAmount
-    );
-
-    wallet->store_join_nonce_delegate(join_nonce, key);
-
-    CMutableTransaction rawTx;
-
-    CTxOut transfer;
-    transfer.scriptPubKey = CScript() << join_nonce << identification << key;
-    transfer.scriptPubKey += address_script;
-    transfer.nValue = nAmount;
-
-    rawTx.vout.push_back(transfer);
-    try {
-        PushOffChain(sufficient, "request-delegate", rawTx);
-    }   catch (std::exception& e) {
-            PrintExceptionContinue(&e, "SendByDelegate()");
-            return false;
-    }
-    return true;
-}
-
-void SignDelegateBind(CWallet* wallet,CMutableTransaction& mergedTx, CUniqreditAddress const& address) {
-    
-	for ( vector<CTxOut>::iterator output = mergedTx.vout.begin();mergedTx.vout.end() != output;output++) {
-        bool at_data = false;
-        CScript with_signature;
-        opcodetype opcode;
-        std::vector<unsigned char> vch;
-        CScript::const_iterator pc = output->scriptPubKey.begin();
-        while (pc < output->scriptPubKey.end())
-        {
-            if (!output->scriptPubKey.GetOp(pc, opcode, vch))
-            {
-                throw runtime_error("error parsing script");
-            }
-            if (0 <= opcode && opcode <= OP_PUSHDATA4) {
-                with_signature << vch;
-                if (at_data) {
-                    at_data = false;
-                    with_signature << OP_DUP;
-                    uint256 hash = Hash(vch.begin(), vch.end());
-
-                    if (!Sign1(boost::get<CKeyID>(address.Get()),*wallet,hash,SIGHASH_ALL, with_signature)) {
-                        throw runtime_error("data signing failed");
-                    }
-
-                    CPubKey public_key;
-                    wallet->GetPubKey(
-                        boost::get<CKeyID>(address.Get()),
-                        public_key
-                    );
-                    with_signature << public_key;
-                    with_signature << OP_CHECKDATASIG << OP_VERIFY;
-                    with_signature << OP_SWAP << OP_HASH160 << OP_EQUAL;
-                    with_signature << OP_VERIFY;
-                }
-            }
-            else {
-                with_signature << opcode;
-                if (OP_IF == opcode) {
-                    at_data = true;
-                }
-            }
-        }
-        output->scriptPubKey = with_signature;
-    }
-}
-
-void SignSenderBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address) {
-   
-    for (vector<CTxOut>::iterator output = mergedTx.vout.begin(); mergedTx.vout.end() != output; output++) {
-        int at_data = 0;
-        CScript with_signature;
-        opcodetype opcode;
-        std::vector<unsigned char> vch;
-        CScript::const_iterator pc = output->scriptPubKey.begin();
-        while (pc < output->scriptPubKey.end())
-        {
-            if (!output->scriptPubKey.GetOp(pc, opcode, vch))
-            {
-                throw runtime_error("error parsing script");
-            }
-            if (0 <= opcode && opcode <= OP_PUSHDATA4) {
-                with_signature << vch;
-                if (2 == at_data) {
-                    at_data = 0;
-                    with_signature << OP_DUP;
-                    uint256 hash = Hash(vch.begin(), vch.end());
-
-                    if (!Sign1(boost::get<CKeyID>(address.Get()), *wallet, hash, SIGHASH_ALL, with_signature)) {
-                        throw runtime_error("data signing failed");
-                    }
-
-                    CPubKey public_key;
-                    wallet->GetPubKey(boost::get<CKeyID>(address.Get()), public_key);
-                    with_signature << public_key;
-                    with_signature << OP_CHECKDATASIG << OP_VERIFY;
-                    with_signature << OP_SWAP << OP_HASH160 << OP_EQUAL;
-                    with_signature << OP_VERIFY;
-                }
-            }
-            else {
-                with_signature << opcode;
-                if (OP_IF == opcode) {
-                    at_data++;
-                } else {
-                    at_data = 0;
-                }
-            }
-        }
-        output->scriptPubKey = with_signature;
-    }
 }
 
 bool CWallet::push_off_chain_transaction(std::string const& name, CTransaction const& tx) {
@@ -4840,8 +4851,8 @@ bool CWallet::get_sender_bind(
 CTransaction CreateTransferFinalize(CWallet* wallet, uint256 const& funded_tx, CScript const& destination) {
 
     CTransaction prevTx;
-    uint256 hashBlock = 0;
-    if (!GetTransaction(funded_tx, prevTx, hashBlock)) {
+    uint256 hashBlock = uint256S(itostr(0));
+    if (!GetTransaction(funded_tx, prevTx,Params().GetConsensus(), hashBlock)) {
         throw runtime_error("transaction unknown");
     }
     int output_index = 0;
@@ -4922,8 +4933,8 @@ CTransaction CreateTransferFinalize(CWallet* wallet, uint256 const& funded_tx, C
 
     for (list<  pair<pair<int, CTxOut const*>, pair<vector<unsigned char>, int> > >::const_iterator traversing = found.begin();
         found.end() != traversing; traversing++,input++) {
-				
-        if (!VerifyScript(input->first->scriptSig, traversing->first.second->scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, SignatureChecker(rawTx, input->second)) ){
+		ScriptError serror = SCRIPT_ERR_OK;	
+        if (!VerifyScript(input->first->scriptSig, traversing->first.second->scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&rawTx, input->second), &serror) ){
             throw std::runtime_error("verification failed");
         }
     }
@@ -4936,8 +4947,8 @@ CTransaction CreateTransferCommit(CWallet* wallet, uint256 const& relayed_delega
     vector<unsigned char> identification = CreateAddressIdentification(local_tor_address_parsed, delegate_address_bind_nonce);
 
     CTransaction prevTx;
-    uint256 hashBlock = 0;
-    if (!GetTransaction(relayed_delegatetx_hash, prevTx, hashBlock)) {
+    uint256 hashBlock = uint256S(itostr(0));
+    if (!GetTransaction(relayed_delegatetx_hash, prevTx,Params().GetConsensus(), hashBlock)) {
         throw runtime_error("transaction unknown");
     }
     int output_index = 0;
@@ -4989,9 +5000,8 @@ CTransaction CreateTransferCommit(CWallet* wallet, uint256 const& relayed_delega
     input.scriptSig << identification;
 
     input.scriptSig << OP_TRUE;
-    
-    if (!VerifyScript(input.scriptSig, found->scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, SignatureChecker(rawTx, output_index) )
-    ) {
+    ScriptError serror = SCRIPT_ERR_OK;
+    if (!VerifyScript(input.scriptSig, found->scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, MutableTransactionSignatureChecker(&rawTx, output_index), &serror )) {
         throw std::runtime_error("verification failed");
     }
 
@@ -5025,7 +5035,7 @@ CTransaction CreateSenderBind(CNetAddr const& local_tor_address_parsed, boost::u
     vector<unsigned char> identification = CreateAddressIdentification( local_tor_address_parsed, received_delegate_nonce );
 
     if (fDebug)
-        printf("CreateSenderBind : \n recover address : %s expiry: %"PRIu64" tor address: %s nonce: %"PRIu64"\n",
+        printf("CreateSenderBind : \n recover address : %s expiry: %lu tor address: %s nonce: %lu\n",
                recover_address_parsed.ToString().c_str(), expiry, local_tor_address_parsed.ToStringIP().c_str(), received_delegate_nonce);
 
     CMutableTransaction rawTx;

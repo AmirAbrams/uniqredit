@@ -128,23 +128,16 @@ struct CRecipient
     bool fSubtractFeeFromAmount;
 };
 
-bool SendByDelegate(CWallet* wallet, CUniqreditAddress const& address, int64_t const& nAmount,CAddress& sufficient);
-
 CTransaction CreateTransferFinalize(CWallet* wallet,uint256 const& bind_tx, CScript const& destination);
 
 CTransaction CreateTransferCommit(CWallet* wallet,uint256 const& relayed_delegatetx_hash,CNetAddr const& local_tor_address_parsed,boost::uint64_t const& delegate_address_bind_nonce,
     boost::uint64_t const& transfer_nonce,CScript const& destination);
-
 
 CTransaction CreateDelegateBind(CNetAddr const& tor_address_parsed,boost::uint64_t const& nonce,uint64_t const& transferred,
     boost::uint64_t const& expiry,CUniqreditAddress const& recover_address_parsed);
 
 CTransaction CreateSenderBind(CNetAddr const& tor_address_parsed,boost::uint64_t const& nonce, uint64_t const& transferred, uint64_t const& fee,
     boost::uint64_t const& expiry, CUniqreditAddress const& recover_address_parsed);
-
-void SignDelegateBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address);
-
-void SignSenderBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address);
 
 CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx, const CCoinControl *coinControl = NULL);
 
@@ -939,6 +932,9 @@ public:
      * selected by SelectCoins(); Also create the change output, when needed
      * @note passing nChangePosInOut as -1 will result in setting a random position
      */
+    bool CreateTransaction(const std::vector<std::pair<CScript, CAmount> >& vecSend,
+                           CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet, int& nChangePosInOut, std::string& strFailReason, const CCoinControl *coinControl = NULL, bool sign=true);
+
     bool CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRet, int& nChangePosInOut,
                            std::string& strFailReason, const CCoinControl *coinControl = NULL, bool sign = true);
     bool CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey);

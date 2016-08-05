@@ -14,7 +14,6 @@
 #include "crypto/common.h"
 #include "crypto/sha256.h"
 #include "hash.h"
-#include "base58.h"
 #include "primitives/transaction.h"
 #include "scheduler.h"
 #include "ui_interface.h"
@@ -454,3 +453,151 @@ std::string SendRetrieveTx(CTransaction tx, int depth)
 
     return std::string("OK! Sent retrieval transaction with txid \n") + hashTx.GetHex();
 }
+
+bool SendByDelegate(CWallet* wallet,CUniqreditAddress const& address,int64_t const& nAmount,CAddress& sufficient) {
+
+    CScript address_script;
+
+    address_script= GetScriptForDestination(address.Get());
+
+    std::map<CAddress, uint64_t> advertised_balances = ListAdvertisedBalances();
+
+    bool found = false;
+
+    //find delegate candidate
+    for (std::map< CAddress, uint64_t >::const_iterator address = advertised_balances.begin(); advertised_balances.end() != address; address++ ) {
+        if (nAmount <= (int64_t)address->second) {
+            found = true;
+            sufficient = address->first;
+            break;
+        }
+    }
+
+    if (!found) {
+        return false;
+    }
+
+    CNetAddr const local = sufficient;
+
+    vector<unsigned char> identification(16);
+
+    for (int filling = 0;16 > filling;filling++) {
+        identification[filling] = local.GetByte(15 - filling);
+    }
+
+    uint64_t const join_nonce = GetRand(std::numeric_limits<uint64_t>::max());
+
+    std::vector<unsigned char> const key = wallet->store_delegate_attempt(false,local,sufficient,address_script,nAmount);
+
+    wallet->store_join_nonce_delegate(join_nonce, key);
+
+    CMutableTransaction rawTx;
+
+    CTxOut transfer;
+    transfer.scriptPubKey = CScript() << join_nonce << identification << key;
+    transfer.scriptPubKey += address_script;
+    transfer.nValue = nAmount;
+
+    rawTx.vout.push_back(transfer);
+    try {
+        PushOffChain(sufficient, "request-delegate", rawTx);
+    }   catch (std::exception& e) {
+            PrintExceptionContinue(&e, "SendByDelegate()");
+            return false;
+    }
+    return true;
+}
+
+void SignDelegateBind(CWallet* wallet,CMutableTransaction& mergedTx, CUniqreditAddress const& address) {
+    
+	for ( vector<CTxOut>::iterator output = mergedTx.vout.begin();mergedTx.vout.end() != output;output++) {
+        bool at_data = false;
+        CScript with_signature;
+        opcodetype opcode;
+        std::vector<unsigned char> vch;
+        CScript::const_iterator pc = output->scriptPubKey.begin();
+        while (pc < output->scriptPubKey.end())
+        {
+            if (!output->scriptPubKey.GetOp(pc, opcode, vch))
+            {
+                throw runtime_error("error parsing script");
+            }
+            if (0 <= opcode && opcode <= OP_PUSHDATA4) {
+                with_signature << vch;
+                if (at_data) {
+                    at_data = false;
+                    with_signature << OP_DUP;
+                    uint256 hash = Hash(vch.begin(), vch.end());
+
+                    if (!Sign1(boost::get<CKeyID>(address.Get()),*wallet,hash,SIGHASH_ALL, with_signature)) {
+                        throw runtime_error("data signing failed");
+                    }
+
+                    CPubKey public_key;
+                    wallet->GetPubKey(
+                        boost::get<CKeyID>(address.Get()),
+                        public_key
+                    );
+                    with_signature << public_key;
+                    with_signature << OP_CHECKDATASIG << OP_VERIFY;
+                    with_signature << OP_SWAP << OP_HASH160 << OP_EQUAL;
+                    with_signature << OP_VERIFY;
+                }
+            }
+            else {
+                with_signature << opcode;
+                if (OP_IF == opcode) {
+                    at_data = true;
+                }
+            }
+        }
+        output->scriptPubKey = with_signature;
+    }
+}
+
+void SignSenderBind(CWallet* wallet, CMutableTransaction& mergedTx, CUniqreditAddress const& address) {
+   
+    for (vector<CTxOut>::iterator output = mergedTx.vout.begin(); mergedTx.vout.end() != output; output++) {
+        int at_data = 0;
+        CScript with_signature;
+        opcodetype opcode;
+        std::vector<unsigned char> vch;
+        CScript::const_iterator pc = output->scriptPubKey.begin();
+        while (pc < output->scriptPubKey.end())
+        {
+            if (!output->scriptPubKey.GetOp(pc, opcode, vch))
+            {
+                throw runtime_error("error parsing script");
+            }
+            if (0 <= opcode && opcode <= OP_PUSHDATA4) {
+                with_signature << vch;
+                if (2 == at_data) {
+                    at_data = 0;
+                    with_signature << OP_DUP;
+                    uint256 hash = Hash(vch.begin(), vch.end());
+
+                    if (!Sign1(boost::get<CKeyID>(address.Get()), *wallet, hash, SIGHASH_ALL, with_signature)) {
+                        throw runtime_error("data signing failed");
+                    }
+
+                    CPubKey public_key;
+                    wallet->GetPubKey(boost::get<CKeyID>(address.Get()), public_key);
+                    with_signature << public_key;
+                    with_signature << OP_CHECKDATASIG << OP_VERIFY;
+                    with_signature << OP_SWAP << OP_HASH160 << OP_EQUAL;
+                    with_signature << OP_VERIFY;
+                }
+            }
+            else {
+                with_signature << opcode;
+                if (OP_IF == opcode) {
+                    at_data++;
+                } else {
+                    at_data = 0;
+                }
+            }
+        }
+        output->scriptPubKey = with_signature;
+    }
+}
+
