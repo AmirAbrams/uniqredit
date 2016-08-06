@@ -16,15 +16,10 @@
 #include "crypto/common.h"
 #include "crypto/sha256.h"
 #include "hash.h"
-#include "base58.h"
 #include "primitives/transaction.h"
 #include "scheduler.h"
 #include "ui_interface.h"
 #include "utilstrencodings.h"
-#include "arith_uint256.h"
-#include "uint256.h"
-
-#include <vector>
 
 #ifdef WIN32
 #include <string.h>
@@ -43,11 +38,7 @@
 #include <boost/thread.hpp>
 
 #include <math.h>
-#ifdef ENABLE_WALLET
-#include "wallet/db.h"
-#include "wallet/wallet.h"
-#include "wallet/walletdb.h"
-#endif
+
 // Dump addresses to peers.dat and banlist.dat every 15 minutes (900s)
 #define DUMP_ADDRESSES_INTERVAL 900
 
@@ -66,7 +57,6 @@
 #endif
 #endif
 
-using namespace std;
 
 namespace {
     const int MAX_OUTBOUND_CONNECTIONS = 8;
@@ -192,7 +182,6 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer)
         ret = CAddress(addr, nLocalServices);
     }
     ret.nTime = GetAdjustedTime();
-    ret.advertised_balance = pwalletMain->GetAdvertisedBalance();    
     return ret;
 }
 
@@ -1553,8 +1542,6 @@ void ThreadDNSAddressSeed()
     LogPrintf("%d addresses found from DNS seeds\n", found);
 }
 
-
-
 std::map<CAddress, uint64_t> ListAdvertisedBalances()
 {
     std::map<CAddress, uint64_t> result;
@@ -2762,4 +2749,14 @@ int64_t PoissonNextSend(int64_t nNow, int average_interval_seconds) {
     std::vector<unsigned char> vchNetGroup(ad.GetGroup());
 
     return CSipHasher(k0, k1).Write(&vchNetGroup[0], vchNetGroup.size()).Finalize();
+}
+
+CNetAddr GetLocalTorAddress(CNetAddr const& address) {
+    CAddress const local = GetLocalAddress(&address);
+
+    if (!local.IsTor()) {
+        throw std::runtime_error("No Tor identity found");
+    }
+
+    return local;
 }

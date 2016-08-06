@@ -4,7 +4,6 @@
 #ifndef IBTP_H
 #define IBTP_H
 
-#include "util.h"
 #include <map>
 
 using namespace std;

@@ -3,8 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "ibtp.h"
 #include "protocol.h"
+#include "ibtp.h"
 #include "util.h"
 #include "utilstrencodings.h"
 
