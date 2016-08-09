@@ -70,6 +70,9 @@ class CScript;
 class CTxMemPool;
 class CWalletTx;
 class CUniqreditAddress;
+class CAddrMan;
+class CAddress;
+class CNetAddr;
 
 /** (client) version numbers for particular wallet features */
 enum WalletFeature
@@ -126,6 +129,10 @@ struct CRecipient
     CAmount nAmount;
     bool fSubtractFeeFromAmount;
 };
+
+bool GetBindHash(uint160& hash, CTransaction const& tx, bool senderbind = false);
+
+std::vector<unsigned char> CreateAddressIdentification(CNetAddr const& tor_address_parsed,boost::uint64_t const& nonce);
 
 CTransaction CreateTransferFinalize(CWallet* wallet,uint256 const& bind_tx, CScript const& destination);
 

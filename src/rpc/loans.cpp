@@ -31,7 +31,7 @@
 UniValue createloanrequest(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 6)
-        throw runtime_error(
+        throw std::runtime_error(
             "createloanrequest \"uniqreditaddress\" \"amount\" \"premium\" \"expiry\" \"period\" \n"
             "\nRequest a loan\n"
             "\nArguments:\n"
@@ -52,12 +52,12 @@ UniValue createloanrequest(const UniValue& params, bool fHelp)
 	CLoanManager loanmgr;
 	CWalletTx wtx;
     LOCK2(cs_main, pwalletMain->cs_wallet);
-	string strAddress  = params[0].get_str();
+	std::string strAddress  = params[0].get_str();
     int64_t amount     = params[1].get_int64();
     double premium  = params[2].get_real();
     int expiry = params[3].get_int();
     int period  = params[4].get_int();
-    string message  = params[5].get_str();
+    std::string message  = params[5].get_str();
     CUniqreditAddress address(SERVER);
 
     // Fee Amount
@@ -66,13 +66,13 @@ UniValue createloanrequest(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
 
     SendMoney(address.Get(), nAmount, true, wtx);
-    string tx= wtx.GetHash().GetHex();
+    std::string tx= wtx.GetHash().GetHex();
 
     std::stringstream raw;
 
-	raw<<"loanrequest"<<'&'<<strAddress<<','<<amount<<','<<premium<<','<<expiry<<','<<period<<','<<message<<','<<tx<<endl;
+	raw<<"loanrequest"<<'&'<<strAddress<<','<<amount<<','<<premium<<','<<expiry<<','<<period<<','<<message<<','<<tx<<std::endl;
 
-	string request = raw.str();
+	std::string request = raw.str();
 
     return loanmgr.senddata(request);
 }
@@ -80,7 +80,7 @@ UniValue createloanrequest(const UniValue& params, bool fHelp)
 UniValue loanfunds(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() !=6)
-        throw runtime_error(
+        throw std::runtime_error(
             "loanfunds \"uniqreditaddress\" \"request-address\" \"request-tx\" \"amount\" \"requestID\" \"message\" \n"
             "\nLoan out funds\n"
             "\nArguments:\n"
@@ -111,22 +111,22 @@ UniValue loanfunds(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
 
     SendMoney(address.Get(), nAmount, false, wtx);
-    string tx= wtx.GetHash().GetHex();
+    std::string tx= wtx.GetHash().GetHex();
     CUniqreditAddress address2(SERVER);
     CAmount nAmount2 = AmountFromValue(100);
     SendMoney(address2.Get(), nAmount2, true, wtx);
-	string strAddress  = params[0].get_str();
-	string receiver  = params[1].get_str();
-	string reqtx  = params[2].get_str();
+	std::string strAddress  = params[0].get_str();
+	std::string receiver  = params[1].get_str();
+	std::string reqtx  = params[2].get_str();
     int64_t amount     = params[3].get_int64();
-    string requestid  = params[4].get_str();
-    string message  = params[5].get_str();
+    std::string requestid  = params[4].get_str();
+    std::string message  = params[5].get_str();
 
 	std::stringstream raw;
 
-	raw<<"issueloan"<<'&'<<strAddress<<','<<receiver<<','<<reqtx<<','<<amount<<','<<requestid<<','<<message<<','<<tx<<endl;
+	raw<<"issueloan"<<'&'<<strAddress<<','<<receiver<<','<<reqtx<<','<<amount<<','<<requestid<<','<<message<<','<<tx<<std::endl;
 
-	string request = raw.str();
+	std::string request = raw.str();
 
     return loanmgr.senddata(request);
 
@@ -135,7 +135,7 @@ UniValue loanfunds(const UniValue& params, bool fHelp)
 UniValue reportloandefault(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 6)
-        throw runtime_error(
+        throw std::runtime_error(
             "reportloandefault \"uniqreditaddress\" \"request-address\" \"request-tx\" \"loan-tx\" \"amount\" \"requestID\" \n"
             "\nReport loan default\n"
             "\nArguments:\n"
@@ -163,26 +163,26 @@ UniValue reportloandefault(const UniValue& params, bool fHelp)
 
     SendMoney(address.Get(), nAmount, true, wtx);
 
-    string tx= wtx.GetHash().GetHex();
+    std::string tx= wtx.GetHash().GetHex();
 
-	string strAddress  = params[0].get_str();
-	string defaulter  = params[1].get_str();
-	string reqtx  = params[2].get_str();
-	string loantx  = params[3].get_str();
+	std::string strAddress  = params[0].get_str();
+	std::string defaulter  = params[1].get_str();
+	std::string reqtx  = params[2].get_str();
+	std::string loantx  = params[3].get_str();
     int64_t amount     = params[4].get_int64();
-    string requestid  = params[5].get_str();
+    std::string requestid  = params[5].get_str();
 	std::stringstream raw;
 
-	raw<<"reportdefault"<<'&'<<strAddress<<','<<defaulter<<','<<reqtx<<','<<loantx<<','<<amount<<','<<requestid<<','<<tx<<endl;
+	raw<<"reportdefault"<<'&'<<strAddress<<','<<defaulter<<','<<reqtx<<','<<loantx<<','<<amount<<','<<requestid<<','<<tx<<std::endl;
 
-	string request = raw.str();
+	std::string request = raw.str();
     return loanmgr.senddata(request);
 }
 
 UniValue registeraddress(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 2)
-        throw runtime_error(
+        throw std::runtime_error(
             "registeraddress \"uniqreditaddress\" \"bitcoin-txid\" \n"
             "\nRequest a loan\n"
             "\nArguments:\n"
@@ -204,13 +204,13 @@ UniValue registeraddress(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
     SendMoney(address.Get(), nAmount, true, wtx);
 
-    string tx= wtx.GetHash().GetHex();
-	string strAddress  = params[0].get_str();
-	string bitcointx  = params[1].get_str();
+    std::string tx= wtx.GetHash().GetHex();
+	std::string strAddress  = params[0].get_str();
+	std::string bitcointx  = params[1].get_str();
 	std::stringstream raw;
-	raw<<"registeraddress"<<'&'<<strAddress<<','<<bitcointx<<','<<tx<<endl;
+	raw<<"registeraddress"<<'&'<<strAddress<<','<<bitcointx<<','<<tx<<std::endl;
 
-	string request = raw.str();
+	std::string request = raw.str();
     return loanmgr.senddata(request);
 
 }
@@ -218,7 +218,7 @@ UniValue registeraddress(const UniValue& params, bool fHelp)
 UniValue createnewvote(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 6)
-        throw runtime_error(
+        throw std::runtime_error(
             "createnewvote \"uniqreditaddress\" \"topic-starter\" \"topic\" \"option 1\" \"option 2\" \"description\"\n"
             "\nRequest a loan\n"
             "\nArguments:\n"
@@ -244,18 +244,18 @@ UniValue createnewvote(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
     SendMoney(address.Get(), nAmount, true, wtx);
 
-    string tx= wtx.GetHash().GetHex();
-	string strAddress  = params[0].get_str();
-	string topicstarter  = params[1].get_str();
-	string topic  = params[2].get_str();
-	string option1  = params[3].get_str();
-	string option2  = params[4].get_str();
-	string description  = params[5].get_str();
+    std::string tx= wtx.GetHash().GetHex();
+	std::string strAddress  = params[0].get_str();
+	std::string topicstarter  = params[1].get_str();
+	std::string topic  = params[2].get_str();
+	std::string option1  = params[3].get_str();
+	std::string option2  = params[4].get_str();
+	std::string description  = params[5].get_str();
 	std::stringstream raw;
 
-	raw<<"createnewvote"<<'&'<<strAddress<<','<<topicstarter<<','<<topic<<','<<option1<<','<<option2<<','<<description<<','<<tx<<endl;
+	raw<<"createnewvote"<<'&'<<strAddress<<','<<topicstarter<<','<<topic<<','<<option1<<','<<option2<<','<<description<<','<<tx<<std::endl;
 
-	string request = raw.str();
+	std::string request = raw.str();
     return loanmgr.senddata(request);
 
 }
@@ -263,7 +263,7 @@ UniValue createnewvote(const UniValue& params, bool fHelp)
 UniValue vote(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 3)
-        throw runtime_error(
+        throw std::runtime_error(
             "vote \"uniqreditaddress\" \"topic\" \"option num\" \n"
             "\nRequest a loan\n"
             "\nArguments:\n"
@@ -288,14 +288,14 @@ UniValue vote(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
     SendMoney(address.Get(), nAmount, true, wtx);
 
-    string tx= wtx.GetHash().GetHex();
-	string strAddress  = params[0].get_str();
-	string topic  = params[1].get_str();
+    std::string tx= wtx.GetHash().GetHex();
+	std::string strAddress  = params[0].get_str();
+	std::string topic  = params[1].get_str();
 	int option  = params[2].get_int();
 	std::stringstream raw;
-	raw<<"vote"<<'&'<<strAddress<<','<<topic<<','<<option<<','<<tx<<endl;
+	raw<<"vote"<<'&'<<strAddress<<','<<topic<<','<<option<<','<<tx<<std::endl;
 
-	string request = raw.str();
+	std::string request = raw.str();
     return loanmgr.senddata(request);
 
 }
@@ -303,7 +303,7 @@ UniValue vote(const UniValue& params, bool fHelp)
 UniValue listadvertisedbalances(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
-        throw runtime_error(
+        throw std::runtime_error(
             "listadvertisedbalances\n"
             "Get Tor addresses with advertised balances.");
 

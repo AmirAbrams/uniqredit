@@ -18,6 +18,7 @@
 #include "hash.h"
 #include "init.h"
 #include "ibtp.h"
+#include "loanmaster.h"
 #include "merkleblock.h"
 #include "net.h"
 #include "policy/fees.h"
@@ -2474,7 +2475,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint("bench", "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(), 0.001 * (nTime3 - nTime2), 0.001 * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : 0.001 * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * 0.000001);
 
-	int64_t devfund = (GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus()))* (0.01);
+	/*int64_t devfund = (GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus()))* (0.01);
 	int64_t dev_subsidy = 0;
 	bool devexists=false;
 	std::map<std::string, double>::iterator donorit;
@@ -2505,7 +2506,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 					return state.DoS(100, error("ConnectBlock(): donor funds error"), REJECT_INVALID, "invalid-block-donor-values");
 			}
 		}
-	}
+	}*/
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
     if (chainActive.Tip()->nHeight > 700 && block.vtx[0].GetValueOut() > blockReward)
@@ -6057,7 +6058,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else {
         // Ignore unknown commands for extensibility
-		SecureMsgReceiveData(pfrom, strCommand, vRecv);
+		//SecureMsgReceiveData(pfrom, strCommand, vRecv);
 		FXReceiveData(pfrom, strCommand, vRecv);
         LogPrint("net", "Unknown command \"%s\" from peer=%d\n", SanitizeString(strCommand), pfrom->id);
     }

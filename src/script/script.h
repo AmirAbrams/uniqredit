@@ -17,6 +17,7 @@
 #include <string.h>
 #include <string>
 #include <vector>
+#include "pubkey.h"
 
 // Maximum number of bytes pushable to the stack
 static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 520;
@@ -661,6 +662,7 @@ public:
         return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE);
     }
 
+    std::string ToString() const;
     void clear()
     {
         // The default std::vector::clear() does not release memory.

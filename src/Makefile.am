@@ -95,12 +95,14 @@ UNIQREDIT_CORE_H = \
   httprpc.h \
   httpserver.h \
   indirectmap.h \
+  ibtp.h \
   init.h \
   key.h \
   keystore.h \
   dbwrapper.h \
   limitedmap.h \
   loanmanager.h \
+  loanmaster.h \
   main.h \
   memusage.h \
   merkleblock.h \
@@ -174,6 +176,7 @@ libuniqredit_server_a_SOURCES = \
   init.cpp \
   dbwrapper.cpp \
   loanmanager.cpp \
+  loanmaster.cpp \
   main.cpp \
   merkleblock.cpp \
   miner.cpp \
@@ -292,6 +295,7 @@ libuniqredit_common_a_SOURCES = \
   compressor.cpp \
   core_read.cpp \
   core_write.cpp \
+  ibtp.cpp \
   key.cpp \
   keystore.cpp \
   netbase.cpp \

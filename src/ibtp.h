@@ -5,8 +5,7 @@
 #define IBTP_H
 
 #include <map>
-
-using namespace std;
+#include <vector>
 
 struct SChain
 {

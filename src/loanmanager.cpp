@@ -29,7 +29,7 @@
 
 /** Loan manager */
 
-string CLoanManager::senddata(string data)
+std::string CLoanManager::senddata(std::string data)
 {
     int sockfd, n;
     struct sockaddr_in serv_addr;
@@ -68,7 +68,7 @@ string CLoanManager::senddata(string data)
 
     close(sockfd);
 
-    string result(buffer);
+    std::string result(buffer);
 
 	return result;
 

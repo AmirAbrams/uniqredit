@@ -10,7 +10,7 @@
 class CLoanManager
 {
 public:
-	std::string senddata(string data);
+	std::string senddata(std::string data);
 };
 
 #endif
