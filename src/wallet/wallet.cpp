@@ -3749,6 +3749,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
                 throw std::runtime_error("could not find signing address");
             }
         } while (false);
+       CCoinControl coinControl;
 
         CUniqreditAddress signing_address;
 
@@ -3882,13 +3883,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         CNetAddr delegate_address;
-        if (
-            !GetBoundAddress(
-                wallet,
-                hash,
-                delegate_address
-            )
-        ) {
+        if (!GetBoundAddress(wallet, hash, delegate_address)) {
             return false;
         }
         CTransaction confirmTx;
@@ -3968,11 +3963,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         uint256 hashBlock = uint256S(itostr(0));
         CTransaction transfer_tx;
         if (!GetTransaction(transfer_txid, transfer_tx,Params().GetConsensus(), hashBlock)) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout,name,tx);
             return true;
         }
         if (uint256S(itostr(0)) == hashBlock) {
@@ -3996,7 +3987,6 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         if (uint256S(itostr(0)) == hashBlock) {
             return false;
         }
-
 
         uint160 hash;
         if (!GetBindHash(hash, prevTx)) {
@@ -4106,19 +4096,11 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         }
         CTransaction transfer_tx;
         if (!GetTransaction(transfer_txid, transfer_tx,Params().GetConsensus(), hashBlock)) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout, name, tx);
             return true;
         }
         if (uint256S(itostr(0)) == hashBlock) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout,name,tx);
             return true;
         }
         if (transfer_tx.vin.empty()) {
@@ -4147,8 +4129,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             std::pair<
                 std::pair<CNetAddr, CNetAddr>,
                 std::pair<CScript, uint64_t>
-            >
-        > delegate_data;
+            > > delegate_data;
         if (!wallet->get_delegate_attempt(key, delegate_data)) {
             return false;
         }
@@ -4159,17 +4140,9 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         if (!wallet->get_sender_bind(key, funded_tx_hash)) {
             return false;
         }
-        CTransaction const finalization_tx = CreateTransferFinalize(
-            wallet,
-            funded_tx_hash,
-            delegate_data.second.second.first
-        );
+        CTransaction const finalization_tx = CreateTransferFinalize(wallet, funded_tx_hash, delegate_data.second.second.first);
         //return false; //***TESTING
-        PushOffChain(
-            delegate_data.second.first.second,
-            "finalized-transfer",
-            finalization_tx
-        );
+        PushOffChain(delegate_data.second.first.second, "finalized-transfer", finalization_tx);
 
         //SENDRET-delete
 
@@ -4222,19 +4195,11 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         CTransaction prevTx;
         uint256 hashBlock = uint256S(itostr(0));
         if (!GetTransaction(relayed_sender_tx_hash, prevTx,Params().GetConsensus(), hashBlock)) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout, name, tx);
             return true;
         }
         if (uint256S(itostr(0)) == hashBlock) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout, name, tx);
             return true;
         }
         uint160 hash;
@@ -4259,7 +4224,6 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
             return false;
         }
         wallet->set_sender_bind(key, relayed_sender_tx_hash);
-
 
         return true;
     } else if ("confirm-delegate-bind" == name) {
@@ -4290,19 +4254,11 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         CTransaction prevTx;
         uint256 hashBlock = uint256S(itostr(0));
         if (!GetTransaction(relayed_delegatetx_hash, prevTx,Params().GetConsensus(), hashBlock)) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout, name, tx);
             return true;
         }
         if (uint256S(itostr(0)) == hashBlock) {
-            wallet->push_deferred_off_chain_transaction(
-                timeout,
-                name,
-                tx
-            );
+            wallet->push_deferred_off_chain_transaction(timeout, name, tx);
             return true;
         }
         uint160 hash;
@@ -4313,13 +4269,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         if (!wallet->get_hash_delegate(hash, key)) {
             return false;
         }
-        std::pair<
-            bool,
-            std::pair<
-                std::pair<CNetAddr, CNetAddr>,
-                std::pair<CScript, uint64_t>
-            >
-        > delegate_data;
+        std::pair< bool, std::pair< std::pair<CNetAddr, CNetAddr>, std::pair<CScript, uint64_t> > > delegate_data;
         if (!wallet->get_delegate_attempt(key, delegate_data)) {
             return false;
         }
@@ -4330,19 +4280,10 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         if (!wallet->get_delegate_nonce(delegate_address_bind_nonce, key)) {
             return false;
         }
-        uint64_t const transfer_nonce = GetRand(
-            std::numeric_limits<uint64_t>::max()
-        );
+        uint64_t const transfer_nonce = GetRand(std::numeric_limits<uint64_t>::max());
         CNetAddr sender_address = delegate_data.second.first.second;
         CNetAddr local_address = delegate_data.second.first.first;
-        CMutableTransaction commit_tx = CreateTransferCommit(
-            wallet,
-            relayed_delegatetx_hash,
-            local_address,
-            delegate_address_bind_nonce,
-            transfer_nonce,
-            delegate_data.second.second.first
-        );
+        CMutableTransaction commit_tx = CreateTransferCommit(wallet,relayed_delegatetx_hash,local_address,delegate_address_bind_nonce, transfer_nonce, delegate_data.second.second.first);
 
         uint64_t join_nonce;
         if (!wallet->get_delegate_join_nonce(key, join_nonce)) {
@@ -4351,9 +4292,7 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         if (commit_tx.vout.empty()) {
             return false;
         }
-        commit_tx.vout[0].scriptPubKey = (
-            CScript() << join_nonce
-        ) + commit_tx.vout[0].scriptPubKey;
+        commit_tx.vout[0].scriptPubKey = (CScript() << join_nonce) + commit_tx.vout[0].scriptPubKey;
 
         //DELRET 3
         std::string retrieval_data;
@@ -4386,16 +4325,10 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         wallet->ReplaceNonceWithRelayedDelegateTxHash(sender_address_bind_nonce, relayed_delegatetx_hash);
         //end delret
 
-        PushOffChain(
-            sender_address,
-            "committed-transfer",
-            commit_tx
-        );
+        PushOffChain(sender_address,"committed-transfer", commit_tx);
         return true;
 
-       } else if (
-       "request-delegate-identification" == name
-         ) {
+       } else if ("request-delegate-identification" == name) {
 
        if (tx.vout.empty()) {
                    return false;
@@ -4458,14 +4391,15 @@ static bool ProcessOffChain(CWallet* wallet, std::string const& name, CTransacti
         } else {
        return false;
       }
-   }
+}
 
 
-CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx, const CCoinControl coinControl) {
+CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx) {
+	
     CWalletTx fundedTx;
-
+    CCoinControl coinControl;
     CReserveKey reserve_key(wallet);
-int nChangePosRet = -1;
+    int nChangePosRet = -1;
     int64_t fee = 0;
 
     vector<pair<CScript, int64_t> > send_vector;

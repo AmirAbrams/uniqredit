@@ -151,7 +151,7 @@ CTransaction CreateDelegateBind(CNetAddr const& tor_address_parsed,boost::uint64
 CTransaction CreateSenderBind(CNetAddr const& tor_address_parsed,boost::uint64_t const& nonce, uint64_t const& transferred, uint64_t const& fee,
     boost::uint64_t const& expiry, CUniqreditAddress const& recover_address_parsed);
 
-CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx, const CCoinControl *coinControl = NULL);
+CTransaction FundAddressBind(CWallet* wallet, CMutableTransaction unfundedTx);
 
 bool GetSenderBindKey(CKeyID& key, CTransaction const& tx);
 bool GetDelegateBindKey(CKeyID& key, CTransaction const& tx);
