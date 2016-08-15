@@ -16,6 +16,7 @@
 #include "wallet/crypter.h"
 #include "wallet/walletdb.h"
 #include "wallet/rpcwallet.h"
+#include "netbase.h"
 
 #include <algorithm>
 #include <map>
