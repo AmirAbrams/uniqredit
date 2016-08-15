@@ -36,6 +36,7 @@ These dependencies are required:
  libssl      | Crypto           | Random Number Generation, Elliptic Curve Cryptography
  libboost    | Utility          | Library for threading, data structures, etc
  libevent    | Networking       | OS independent asynchronous networking
+ sqlite3     | SQLite v3        | Used for local data storage.
 
 Optional dependencies:
 
@@ -65,7 +66,7 @@ Dependency Build Instructions: Ubuntu & Debian
 ----------------------------------------------
 Build requirements:
 
-    sudo apt-get install build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils
+    sudo apt-get install build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils sqlite3 libsqlite3-dev
 
 Options when installing required Boost library files:
 
@@ -82,7 +83,7 @@ install necessary parts of boost:
 BerkeleyDB is required for the wallet. db4.8 packages are available [here](https://launchpad.net/~uniqredit/+archive/uniqredit).
 You can add the repository and install using the following commands:
 
-    sudo add-apt-repository ppa:uniqredit/uniqredit
+    sudo add-apt-repository ppa:bitcoin/bitcoin
     sudo apt-get update
     sudo apt-get install libdb4.8-dev libdb4.8++-dev
 
@@ -100,7 +101,7 @@ Optional:
 ZMQ dependencies:
 
     sudo apt-get install libzmq3-dev (provides ZMQ API 4.x)
-
+    
 Dependencies for the GUI: Ubuntu & Debian
 -----------------------------------------
 
